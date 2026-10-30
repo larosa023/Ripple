@@ -4,6 +4,8 @@
   import Nav from './lib/components/Nav.svelte';
   import Studio from './lib/components/Studio.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import TitleBar from './lib/components/TitleBar.svelte';
+  import { isTauri } from './lib/stremio/http';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import { checkForUpdate, loadVersion } from './lib/stores/updater.svelte';
   import { setRequestTimeout } from './lib/stremio/client';
@@ -28,6 +30,19 @@
   });
 
   $effect(() => setRequestTimeout(settings.requestTimeoutSec * 1000));
+
+  // Ripple draws its own themed title bar unless the user picks the standard Windows one.
+  const customChrome = $derived(isTauri && !settings.nativeTitleBar);
+  $effect(() => {
+    const native = settings.nativeTitleBar;
+    if (!isTauri) return;
+    import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().setDecorations(native)).catch(() => {});
+  });
+  // Height of the window-button area, so overlays (Customize panel) never cover the buttons.
+  $effect(() => {
+    const h = !customChrome ? '0px' : look.nav === 'top' ? '56px' : '32px';
+    document.documentElement.style.setProperty('--chrome-h', h);
+  });
 
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);
@@ -56,6 +71,7 @@
 <div class="shell" class:column={look.nav === 'top'} class:has-bg={!!look.bgImage || look.bgAnimation !== 'none'}>
   <Nav />
   <main>
+    {#if customChrome && look.nav !== 'top'}<TitleBar />{/if}
     <UpdateBanner />
     <div class="view">
       {#key router.route.name === 'detail' ? router.route.params.join('/') : router.route.name}

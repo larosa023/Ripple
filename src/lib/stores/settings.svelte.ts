@@ -17,6 +17,8 @@ export interface HomeRow {
 
 export interface Settings {
   startPage: StartPage;
+  /** Use the standard Windows title bar instead of Ripple's themed one. */
+  nativeTitleBar: boolean;
   // Home
   homeRows: HomeRow[];
   rowItemLimit: number;
@@ -42,6 +44,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   startPage: 'home',
+  nativeTitleBar: false,
   homeRows: [],
   rowItemLimit: 20,
   showContinueWatching: true,

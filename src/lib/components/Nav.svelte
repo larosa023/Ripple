@@ -10,6 +10,9 @@
 
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import WindowControls from './WindowControls.svelte';
+  import { isTauri } from '../stremio/http';
+  import { settings } from '../stores/settings.svelte';
   import { href, router, type RouteName } from '../stores/router.svelte';
   import { look } from '../theme/look.svelte';
   import { openStudio, ui } from '../stores/ui.svelte';
@@ -17,11 +20,12 @@
   const items = $derived(look.navItems.filter((n) => n.visible));
   const labels = $derived(look.nav === 'sidebar' || look.nav === 'rail' || look.nav === 'top');
   const active = (name: RouteName) => router.route.name === name;
+  const customChrome = $derived(isTauri && !settings.nativeTitleBar);
   const iconSize = $derived(look.nav === 'top' ? 18 : look.nav === 'dock' ? 23 : 21);
   const iconStroke = $derived(look.nav === 'dock' ? 2.2 : 1.8);
 </script>
 
-<nav class="nav {look.nav}" style:--dock-alpha={`${Math.round(look.dockOpacity * 100)}%`}>
+<nav class="nav {look.nav}" class:chrome={customChrome && look.nav === 'top'} style:--dock-alpha={`${Math.round(look.dockOpacity * 100)}%`} data-tauri-drag-region={look.nav === 'dock' ? undefined : true}>
   <a class="brand" href={href('home')} aria-label="Ripple home">
     <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
       <circle cx="16" cy="16" r="4" fill="var(--accent)" />
@@ -51,6 +55,7 @@
       {#if labels}<span>Settings</span>{/if}
     </a>
   </div>
+  {#if customChrome && look.nav === 'top'}<WindowControls />{/if}
 </nav>
 
 <svelte:window onkeydown={(e) => {
@@ -96,6 +101,8 @@
     background: var(--glass); backdrop-filter: blur(16px); border-bottom: 1px solid var(--line);
   }
   .top .items { flex: 1; }
+  .top.chrome { padding-right: 0; }
+  .top.chrome .end { margin-right: 8px; }
   .top .item { padding: 7px 12px; font-size: 13.5px; gap: 8px; }
 
   /* Floating dock: opaque enough (and with bright, shadowed icons) to stay readable over busy artwork */

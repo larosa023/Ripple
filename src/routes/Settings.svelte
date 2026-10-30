@@ -95,6 +95,9 @@
                 <option value="library">Library</option>
               </select>
             </SettingRow>
+            <SettingRow title="Windows title bar" description="Use the standard Windows title bar instead of Ripple's themed one. Turn on if you want Windows 11 snap layouts on the maximize button.">
+              <Switch bind:checked={settings.nativeTitleBar} label="Windows title bar" />
+            </SettingRow>
             <SettingRow title="Hide 18+ catalogs" description="Skip catalogs from addons that mark themselves as adult on Home, Discover and Search.">
               <Switch bind:checked={settings.hideAdultAddons} label="Hide 18+ catalogs" />
             </SettingRow>

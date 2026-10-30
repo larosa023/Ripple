@@ -456,7 +456,7 @@
 
 <style>
   .studio {
-    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 50;
+    position: fixed; top: var(--chrome-h, 0px); right: 0; bottom: 0; width: 400px; z-index: 50;
     display: flex; flex-direction: column;
     background: var(--bg-2); border-left: 1px solid var(--line);
     box-shadow: -24px 0 60px rgb(0 0 0 / 0.4);

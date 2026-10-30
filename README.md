@@ -21,6 +21,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
   - **Title pages**: cinematic or classic layout, backdrop strength, episodes as list or grid.
   - **Backgrounds**: your own image with dim and blur, or animated aurora / bokeh.
   - **Custom CSS** with a cheat sheet, and a **theme library**: save looks, share them as `.ripplestyle` files, import others'.
+- **Seamless window**: Ripple draws its own themed title bar (or switch back to the Windows one in Settings).
 - **Drag to scroll**: click and drag any row to pan through it, with momentum.
 - **Discover** with type tabs, catalog picker, genre filter, and infinite scroll.
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
