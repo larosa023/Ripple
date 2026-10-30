@@ -231,6 +231,9 @@
           </button>
         {/each}
       </div>
+      {#if look.nav === 'dock'}
+        <label class="slider"><span>Dock opacity</span><input type="range" min="0.5" max="1" step="0.02" bind:value={look.dockOpacity} /><b>{Math.round(look.dockOpacity * 100)}%</b></label>
+      {/if}
       <div class="list">
         {#each look.navItems as n, i (n.id)}
           <div class="li" class:off={!n.visible}>

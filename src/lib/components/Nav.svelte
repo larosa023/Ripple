@@ -17,9 +17,11 @@
   const items = $derived(look.navItems.filter((n) => n.visible));
   const labels = $derived(look.nav === 'sidebar' || look.nav === 'rail' || look.nav === 'top');
   const active = (name: RouteName) => router.route.name === name;
+  const iconSize = $derived(look.nav === 'top' ? 18 : look.nav === 'dock' ? 23 : 21);
+  const iconStroke = $derived(look.nav === 'dock' ? 2.2 : 1.8);
 </script>
 
-<nav class="nav {look.nav}">
+<nav class="nav {look.nav}" style:--dock-alpha={`${Math.round(look.dockOpacity * 100)}%`}>
   <a class="brand" href={href('home')} aria-label="Ripple home">
     <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
       <circle cx="16" cy="16" r="4" fill="var(--accent)" />
@@ -33,7 +35,7 @@
     {#each items as item (item.id)}
       {@const m = NAV_META[item.id]}
       <a class="item" class:active={active(item.id)} href={href(item.id)} title={m.label}>
-        <Icon name={m.icon} size={look.nav === 'top' ? 18 : 21} />
+        <Icon name={m.icon} size={iconSize} stroke={iconStroke} />
         {#if labels}<span>{m.label}</span>{/if}
       </a>
     {/each}
@@ -41,11 +43,11 @@
 
   <div class="end">
     <button class="item" class:active={ui.studioOpen} onclick={() => (ui.studioOpen = !ui.studioOpen)} title="Customize">
-      <Icon name="brush" size={look.nav === 'top' ? 18 : 21} />
+      <Icon name="brush" size={iconSize} stroke={iconStroke} />
       {#if labels}<span>Customize</span>{/if}
     </button>
     <a class="item" class:active={active('settings')} href={href('settings')} title="Settings">
-      <Icon name="settings" size={look.nav === 'top' ? 18 : 21} />
+      <Icon name="settings" size={iconSize} stroke={iconStroke} />
       {#if labels}<span>Settings</span>{/if}
     </a>
   </div>
@@ -96,15 +98,26 @@
   .top .items { flex: 1; }
   .top .item { padding: 7px 12px; font-size: 13.5px; gap: 8px; }
 
-  /* Floating dock */
+  /* Floating dock: opaque enough (and with bright, shadowed icons) to stay readable over busy artwork */
   .dock {
     position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-    align-items: center; gap: 4px; padding: 6px;
-    background: var(--glass); backdrop-filter: blur(20px) saturate(1.4);
-    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-    border-radius: 22px; box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+    align-items: center; gap: 4px; padding: 7px;
+    background: color-mix(in srgb, var(--bg-2) var(--dock-alpha, 88%), transparent);
+    backdrop-filter: blur(28px) saturate(1.6) brightness(0.8);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+    border-radius: 24px;
+    box-shadow: 0 18px 50px rgb(0 0 0 / 0.55), inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent);
   }
   .dock .brand { padding: 0 8px 0 6px; }
-  .dock .item { width: 46px; height: 46px; justify-content: center; border-radius: 16px; }
-  .dock .end { padding-left: 4px; margin-left: 4px; border-left: 1px solid var(--line); }
+  .dock .item {
+    width: 50px; height: 50px; justify-content: center; border-radius: 17px;
+    color: color-mix(in srgb, var(--text) 82%, transparent);
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55));
+  }
+  .dock .item:hover { color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); }
+  .dock .item.active {
+    color: var(--on-accent); background: var(--accent); filter: none;
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .dock .end { padding-left: 4px; margin-left: 4px; border-left: 1px solid color-mix(in srgb, var(--text) 16%, transparent); }
 </style>

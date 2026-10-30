@@ -31,6 +31,8 @@ export interface Look {
   // Navigation
   nav: NavLayout;
   navItems: NavItem[];
+  /** Dock background opacity, 0.5..1 */
+  dockOpacity: number;
   // Cards
   cardStyle: CardStyle;
   hover: HoverEffect;
@@ -76,6 +78,7 @@ export const DEFAULT_LOOK: Look = {
   buttonStyle: 'rounded',
   nav: 'rail',
   navItems: NAV_DEFAULT,
+  dockOpacity: 0.88,
   cardStyle: 'plain',
   hover: 'lift',
   posterSize: 'medium',
