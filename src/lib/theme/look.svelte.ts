@@ -2,7 +2,7 @@
 // saved, shared as a .ripplestyle file, and applied in one step.
 
 import { load, save } from '../stores/persist';
-import { fontById, PRESETS, presetById, type Palette } from './presets';
+import { FONTS, fontById, PRESETS, presetById, type Palette } from './presets';
 
 export type NavLayout = 'sidebar' | 'rail' | 'icons' | 'top' | 'dock';
 export type CardStyle = 'plain' | 'outlined' | 'elevated' | 'glass' | 'overlay';
@@ -138,15 +138,30 @@ $effect.root(() => {
   });
 });
 
+/**
+ * Runs a theme change inside a View Transition so the whole app crossfades
+ * between themes in one GPU-composited step (no per-element color transitions).
+ */
+function smoothly(change: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (!doc.startViewTransition || look.reduceMotion) return change();
+  doc.startViewTransition(() => {
+    change();
+    applyLook($state.snapshot(look) as Look);
+  });
+}
+
 export function applyPreset(id: string) {
   const p = presetById(id);
   if (!p) return;
-  look.preset = id;
-  look.colors = { ...p.colors };
+  smoothly(() => {
+    look.preset = id;
+    look.colors = { ...p.colors };
+  });
 }
 
 export function resetLook() {
-  Object.assign(look, structuredClone(DEFAULT_LOOK));
+  smoothly(() => Object.assign(look, structuredClone(DEFAULT_LOOK)));
 }
 
 // ---------- applying the look to the page ----------
@@ -190,6 +205,19 @@ function ensureGoogleFonts(families: string[] | undefined) {
   document.head.appendChild(link);
 }
 
+let previewsLoaded = false;
+/** Loads just the glyphs needed to preview each font's name (a few KB total). */
+export function loadFontPreviews() {
+  if (previewsLoaded) return;
+  previewsLoaded = true;
+  const families = FONTS.flatMap((f) => f.google ?? []).map((f) => f.split(':')[0]);
+  const text = encodeURIComponent([...new Set(FONTS.map((f) => f.name).join('') + 'Aa')].join(''));
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?${[...new Set(families)].map((f) => 'family=' + f).join('&')}&text=${text}&display=swap`;
+  document.head.appendChild(link);
+}
+
 let customFontKey = '';
 async function ensureCustomFont(font: Look['customFont']) {
   if (!font) return;
@@ -220,7 +248,12 @@ export function applyLook(l: Look) {
   s.setProperty('--text-2', c.text2);
   s.setProperty('--text-3', `color-mix(in srgb, ${c.text2} 65%, ${c.bg})`);
   s.setProperty('--accent', c.accent);
-  s.setProperty('--on-accent', luminance(c.accent) > 0.45 ? '#111318' : '#ffffff');
+  // Text on accent-colored surfaces: whichever of white or near-black reads better.
+  const la = luminance(c.accent);
+  const onWhite = 1.05 / (la + 0.05);
+  const onDark = (la + 0.05) / (luminance('#111318') + 0.05);
+  s.setProperty('--on-accent', onDark > onWhite ? '#111318' : '#ffffff');
+  s.setProperty('--accent-soft', `color-mix(in srgb, ${c.accent} 16%, transparent)`);
   const light = luminance(c.bg) > 0.4;
   root.style.colorScheme = light ? 'light' : 'dark';
   root.dataset.light = light ? '1' : '';
@@ -282,7 +315,7 @@ export function saveCurrentTheme(name: string): SavedTheme {
 }
 
 export function applyTheme(t: SavedTheme) {
-  Object.assign(look, normalizeLook(structuredClone(t.look)));
+  smoothly(() => Object.assign(look, normalizeLook(structuredClone(t.look))));
 }
 
 export function deleteTheme(id: string) {

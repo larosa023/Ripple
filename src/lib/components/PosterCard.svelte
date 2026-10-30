@@ -122,8 +122,10 @@
   :global(:root[data-card='elevated']) .frame { background: var(--bg-2); padding: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
   :global(:root[data-card='elevated']) .art { border-radius: calc(var(--radius) * 0.7); }
   :global(:root[data-card='glass']) .frame {
-    padding: 6px; background: var(--glass); backdrop-filter: blur(14px);
-    border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+    /* Frosted look from translucency + a light edge; no per-card backdrop blur (that re-renders every card while scrolling). */
+    padding: 6px; background: color-mix(in srgb, var(--bg-2) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent);
   }
   :global(:root[data-card='glass']) .art { border-radius: calc(var(--radius) * 0.7); }
   :global(:root[data-card='outlined']) .below,

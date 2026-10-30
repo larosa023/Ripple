@@ -20,19 +20,27 @@ export interface Preset {
   colors: Palette;
 }
 
+// Palettes are contrast-checked: body text >= 10:1, muted text >= 4.5:1 on raised
+// surfaces, accent >= 3:1 against the background.
 export const PRESETS: Preset[] = [
-  { id: 'ripple', name: 'Ripple', colors: { bg: '#0b0d12', surface: '#12151c', surface2: '#1a1e27', line: '#262b36', text: '#e8ebf2', text2: '#9aa2b4', accent: '#5b8cff' } },
-  { id: 'midnight', name: 'Midnight', colors: { bg: '#000000', surface: '#0a0a0c', surface2: '#141418', line: '#1f1f25', text: '#ededf0', text2: '#9a9aa6', accent: '#5b8cff' } },
-  { id: 'violet', name: 'Violet', colors: { bg: '#0c0b11', surface: '#151320', surface2: '#1d1a2b', line: '#2a2640', text: '#ebeaf2', text2: '#9f9bb8', accent: '#7b5bf5' } },
-  { id: 'nord', name: 'Nord', colors: { bg: '#2e3440', surface: '#353c4a', surface2: '#3b4252', line: '#4c566a', text: '#eceff4', text2: '#b4bccb', accent: '#88c0d0' } },
-  { id: 'dracula', name: 'Dracula', colors: { bg: '#22212c', surface: '#2a2936', surface2: '#343244', line: '#44415a', text: '#f8f8f2', text2: '#aeacc9', accent: '#bd93f9' } },
-  { id: 'forest', name: 'Forest', colors: { bg: '#0f1612', surface: '#151f19', surface2: '#1c2921', line: '#2a3c30', text: '#e6efe8', text2: '#9db5a4', accent: '#5fd38d' } },
-  { id: 'ember', name: 'Ember', colors: { bg: '#121010', surface: '#1a1716', surface2: '#24201e', line: '#352e2a', text: '#f2ece8', text2: '#b5a9a2', accent: '#ff7a1a' } },
-  { id: 'royal', name: 'Royal', colors: { bg: '#0e0b1a', surface: '#161229', surface2: '#1f1937', line: '#2f2650', text: '#ece8ff', text2: '#a59cc9', accent: '#f2c14e' } },
-  { id: 'velvet', name: 'Velvet', colors: { bg: '#170b12', surface: '#22101a', surface2: '#2e1623', line: '#432236', text: '#f7e9ef', text2: '#c49aad', accent: '#ff4d8d' } },
-  { id: 'aurora', name: 'Aurora', colors: { bg: '#07131a', surface: '#0c1d26', surface2: '#122a35', line: '#1d3e4d', text: '#e3f6fb', text2: '#8fb8c6', accent: '#2ee6c5' } },
-  { id: 'paper', name: 'Paper', light: true, colors: { bg: '#f4f5f8', surface: '#ffffff', surface2: '#eceef3', line: '#dde0e8', text: '#141821', text2: '#4f586b', accent: '#3b6cff' } },
+  { id: 'ripple', name: 'Ripple', colors: { bg: '#0b0d12', surface: '#13161d', surface2: '#1b1f28', line: '#272c37', text: '#eceff5', text2: '#9ba3b5', accent: '#5b8cff' } },
+  { id: 'midnight', name: 'Midnight', colors: { bg: '#000000', surface: '#0b0b0d', surface2: '#151518', line: '#232328', text: '#efeff2', text2: '#9d9da8', accent: '#6e8bff' } },
+  { id: 'graphite', name: 'Graphite', colors: { bg: '#111111', surface: '#191919', surface2: '#222222', line: '#2e2e2e', text: '#f0f0f0', text2: '#a3a3a3', accent: '#ececec' } },
+  { id: 'violet', name: 'Violet', colors: { bg: '#0d0b14', surface: '#16131f', surface2: '#1f1b2b', line: '#2c2740', text: '#eeecf5', text2: '#a29dba', accent: '#8b6cff' } },
+  { id: 'nord', name: 'Nord', colors: { bg: '#2e3440', surface: '#343b49', surface2: '#3b4252', line: '#4a5368', text: '#eceff4', text2: '#b6bfcf', accent: '#88c0d0' } },
+  { id: 'dracula', name: 'Dracula', colors: { bg: '#1f1e29', surface: '#282734', surface2: '#312f40', line: '#403d55', text: '#f8f8f2', text2: '#b0aecb', accent: '#bd93f9' } },
+  { id: 'forest', name: 'Forest', colors: { bg: '#0d1410', surface: '#141d17', surface2: '#1b271f', line: '#273629', text: '#e7efe9', text2: '#9fb6a6', accent: '#4fd087' } },
+  { id: 'ember', name: 'Ember', colors: { bg: '#120f0e', surface: '#1a1615', surface2: '#231e1c', line: '#322a27', text: '#f3ede9', text2: '#b8aba3', accent: '#ff7a1a' } },
+  { id: 'royal', name: 'Royal', colors: { bg: '#0d0a18', surface: '#151126', surface2: '#1d1834', line: '#2b2449', text: '#eeeaff', text2: '#a89fcc', accent: '#f2c14e' } },
+  { id: 'velvet', name: 'Velvet', colors: { bg: '#150910', surface: '#200e18', surface2: '#2b1421', line: '#3d1d30', text: '#f8eaf0', text2: '#c79db0', accent: '#ff4d8d' } },
+  { id: 'aurora', name: 'Aurora', colors: { bg: '#061218', surface: '#0b1c24', surface2: '#102833', line: '#1a3a47', text: '#e3f6fb', text2: '#92bccb', accent: '#2ee6c5' } },
+  { id: 'crimson', name: 'Crimson', colors: { bg: '#120a0b', surface: '#1b0f11', surface2: '#251517', line: '#36201f', text: '#f5eaea', text2: '#bfa3a3', accent: '#ef4444' } },
+  { id: 'paper', name: 'Paper', light: true, colors: { bg: '#f5f6f9', surface: '#ffffff', surface2: '#eef0f4', line: '#dfe2ea', text: '#12161f', text2: '#525b6e', accent: '#3b6cff' } },
+  { id: 'linen', name: 'Linen', light: true, colors: { bg: '#f7f3ee', surface: '#fffdfa', surface2: '#f0ebe4', line: '#e3dcd2', text: '#1f1a15', text2: '#6b6157', accent: '#b8501f' } },
 ];
+
+/** Quick accent picks shown under the theme grid. */
+export const ACCENTS = ['#5b8cff', '#8b6cff', '#ff4d8d', '#ff00d4', '#ef4444', '#ff7a1a', '#f2c14e', '#4fd087', '#2ee6c5', '#38bdf8', '#ececec'];
 
 export function presetById(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id);

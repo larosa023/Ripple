@@ -13,7 +13,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Every Stremio addon.** Install from any `manifest.json` or `stremio://` link, or import your entire addon collection from your Stremio account in one step.
 - **Addon control.** Enable/disable, drag to reorder priority, open configure pages, update all manifests.
 - **Customize studio** (brush icon or `Ctrl+Shift+C`): a live slide-in editor for everything below.
-  - **11 theme presets** plus a full 7-color editor, **8 font pairings** and custom font upload, UI scale, corner radius, button shape.
+  - **14 contrast-checked theme presets** (12 dark, 2 light) with live mini previews, quick accent colors, a full 7-color editor, **8 font pairings** and custom font upload, UI scale, corner radius, button shape.
   - **5 navigation layouts**: sidebar, labeled rail, icon rail, top bar, floating dock. Hide or reorder nav items.
   - **5 card styles** (plain, outlined, raised, glass, title overlay), 4 hover effects, 4 sizes, 3 spacing densities.
   - **Rotating hero banner** (full, compact, or off) from any catalog, with adjustable rotation.

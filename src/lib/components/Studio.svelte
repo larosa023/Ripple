@@ -1,14 +1,16 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Switch from './Switch.svelte';
   import { NAV_META } from './Nav.svelte';
   import { boardCatalogs, syncRows } from '../home';
   import { addons } from '../stores/addons.svelte';
   import { settings, type RowDisplay } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
   import { ui, type StudioTab } from '../stores/ui.svelte';
-  import { FONTS, PRESETS, presetById, type Palette } from '../theme/presets';
+  import { ACCENTS, FONTS, PRESETS, presetById, type Palette } from '../theme/presets';
   import {
     applyPreset,
+    loadFontPreviews,
     applyTheme,
     deleteTheme,
     look,
@@ -120,6 +122,10 @@
     (e.currentTarget as HTMLInputElement).value = '';
   }
 
+  $effect(() => {
+    if (ui.studioOpen && ui.studioTab === 'look') loadFontPreviews();
+  });
+
   const modified = $derived.by(() => {
     const p = presetById(look.preset);
     return !!p && (Object.keys(p.colors) as (keyof Palette)[]).some((k) => p.colors[k].toLowerCase() !== look.colors[k].toLowerCase());
@@ -147,34 +153,63 @@
 
   <div class="body">
     {#if ui.studioTab === 'look'}
-      <h3>Theme</h3>
-      <div class="presets">
-        {#each PRESETS as p (p.id)}
-          <button class="preset" class:on={look.preset === p.id} onclick={() => applyPreset(p.id)} style:background={p.colors.bg} style:color={p.colors.text} style:border-color={look.preset === p.id ? p.colors.accent : p.colors.line}>
-            <span class="sw">
-              <i style:background={p.colors.surface2}></i><i style:background={p.colors.text2}></i><i style:background={p.colors.accent}></i>
-            </span>
-            {p.name}
-          </button>
+      {#each [{ label: 'Dark', items: PRESETS.filter((p) => !p.light) }, { label: 'Light', items: PRESETS.filter((p) => p.light) }] as group (group.label)}
+        <h3>{group.label} themes</h3>
+        <div class="presets">
+          {#each group.items as p (p.id)}
+            {@const c = p.colors}
+            <button class="preset" class:on={look.preset === p.id} onclick={() => applyPreset(p.id)} aria-pressed={look.preset === p.id}>
+              <span class="mock" style:background={c.bg} style:border-color={c.line}>
+                <span class="m-rail" style:background={c.surface}></span>
+                <span class="m-hero" style:background={c.surface2}>
+                  <span class="m-line" style:background={c.text}></span>
+                  <span class="m-line short" style:background={c.text2}></span>
+                  <span class="m-btn" style:background={c.accent}></span>
+                </span>
+                <span class="m-cards">
+                  <i style:background={c.surface2}></i><i style:background={c.surface2}></i><i style:background={c.surface2}></i><i style:background={c.surface2}></i>
+                </span>
+              </span>
+              <span class="pname">
+                <span class="dot" style:background={c.accent}></span>{p.name}
+                {#if look.preset === p.id}<span class="check"><Icon name="check" size={12} stroke={3} /></span>{/if}
+              </span>
+            </button>
+          {/each}
+        </div>
+      {/each}
+
+      <h3>Accent</h3>
+      <div class="accents">
+        {#each ACCENTS as a (a)}
+          <button class="acc" class:on={look.colors.accent.toLowerCase() === a} style:--c={a} aria-label={`Accent ${a}`} onclick={() => (look.colors.accent = a)}></button>
         {/each}
+        <label class="acc custom" title="Custom accent" class:on={!ACCENTS.includes(look.colors.accent.toLowerCase())}>
+          <input type="color" bind:value={look.colors.accent} />
+        </label>
       </div>
 
-      <h3>Colors {#if modified}<button class="link" onclick={() => applyPreset(look.preset)}>reset to {presetById(look.preset)?.name}</button>{/if}</h3>
-      <div class="colors">
-        {#each COLOR_FIELDS as f (f.key)}
-          <label class="color">
-            <input type="color" bind:value={look.colors[f.key]} />
-            <span>{f.label}</span>
-            <input class="hex" bind:value={look.colors[f.key]} spellcheck="false" maxlength="9" />
-          </label>
-        {/each}
-      </div>
+      <details class="fine" open={modified}>
+        <summary>
+          Fine-tune colors
+          {#if modified}<button class="link" onclick={(e) => { e.preventDefault(); applyPreset(look.preset); }}>Reset to {presetById(look.preset)?.name}</button>{/if}
+        </summary>
+        <div class="colors">
+          {#each COLOR_FIELDS as f (f.key)}
+            <label class="color">
+              <span class="cw"><input type="color" bind:value={look.colors[f.key]} /></span>
+              <span class="cl">{f.label}<input class="hex" bind:value={look.colors[f.key]} spellcheck="false" maxlength="9" aria-label={`${f.label} hex`} /></span>
+            </label>
+          {/each}
+        </div>
+      </details>
 
       <h3>Font</h3>
       <div class="fonts">
         {#each FONTS as f (f.id)}
           <button class="font" class:on={look.font === f.id && !look.customFont} onclick={() => { look.font = f.id; look.customFont = null; }}>
-            <span style:font-family={f.display ?? f.body}>Aa</span>{f.name}
+            <span class="aa" style:font-family={f.display ?? f.body}>Aa</span>
+            <span class="fname" style:font-family={f.body}>{f.name}</span>
           </button>
         {/each}
       </div>
@@ -183,7 +218,7 @@
           <span class="chip accent">Custom: {look.customFont.name}</span>
           <button class="btn sm" onclick={() => (look.customFont = null)}>Remove</button>
         {:else}
-          <label class="btn sm"><Icon name="upload" size={14} />Upload font (.ttf .otf .woff2)
+          <label class="btn sm ghost"><Icon name="upload" size={14} />Use my own font file
             <input type="file" accept=".ttf,.otf,.woff,.woff2" hidden onchange={pickFont} />
           </label>
         {/if}
@@ -191,7 +226,7 @@
 
       <h3>Size &amp; shape</h3>
       <label class="slider"><span>UI scale</span><input type="range" min="0.8" max="1.3" step="0.05" bind:value={look.uiScale} /><b>{Math.round(look.uiScale * 100)}%</b></label>
-      <label class="slider"><span>Corner radius</span><input type="range" min="0" max="26" step="1" bind:value={look.radius} /><b>{look.radius}px</b></label>
+      <label class="slider"><span>Roundness</span><input type="range" min="0" max="26" step="1" bind:value={look.radius} /><b>{look.radius}px</b></label>
       <div class="opt"><span>Buttons</span>
         <div class="seg">
           {#each [['rounded', 'Rounded'], ['pill', 'Pill'], ['square', 'Square']] as [v, l] (v)}
@@ -201,7 +236,7 @@
       </div>
 
       <h3>Background</h3>
-      <div class="opt"><span>Animation</span>
+      <div class="opt"><span>Effect</span>
         <div class="seg">
           {#each [['none', 'None'], ['aurora', 'Aurora'], ['bokeh', 'Bokeh']] as [v, l] (v)}
             <button class:on={look.bgAnimation === v} onclick={() => (look.bgAnimation = v as typeof look.bgAnimation)}>{l}</button>
@@ -220,7 +255,7 @@
         <label class="slider"><span>Dim</span><input type="range" min="0" max="0.95" step="0.05" bind:value={look.bgDim} /><b>{Math.round(look.bgDim * 100)}%</b></label>
         <label class="slider"><span>Blur</span><input type="range" min="0" max="40" step="1" bind:value={look.bgBlur} /><b>{look.bgBlur}px</b></label>
       {/if}
-      <label class="toggle"><input type="checkbox" bind:checked={look.reduceMotion} />Reduce motion</label>
+      <div class="toggle"><span>Reduce motion</span><Switch bind:checked={look.reduceMotion} label="Reduce motion" /></div>
 
     {:else if ui.studioTab === 'layout'}
       <h3>Navigation</h3>
@@ -273,8 +308,8 @@
           {/each}
         </div>
       </div>
-      <label class="toggle"><input type="checkbox" bind:checked={look.showTitles} />Titles under cards</label>
-      <label class="toggle"><input type="checkbox" bind:checked={look.showRatings} />IMDb rating badges</label>
+      <div class="toggle"><span>Titles under cards</span><Switch bind:checked={look.showTitles} label="Titles under cards" /></div>
+      <div class="toggle"><span>IMDb rating badges</span><Switch bind:checked={look.showRatings} label="IMDb rating badges" /></div>
 
       <h3>Title pages</h3>
       <div class="opt"><span>Layout</span>
@@ -292,7 +327,7 @@
         </div>
       </div>
       <label class="slider"><span>Backdrop</span><input type="range" min="0" max="1" step="0.05" bind:value={look.backdropStrength} /><b>{Math.round(look.backdropStrength * 100)}%</b></label>
-      <label class="toggle"><input type="checkbox" bind:checked={look.showCast} />Show cast</label>
+      <div class="toggle"><span>Show cast</span><Switch bind:checked={look.showCast} label="Show cast" /></div>
 
     {:else if ui.studioTab === 'home'}
       <h3>Hero banner</h3>
@@ -314,7 +349,7 @@
       {/if}
 
       <h3>Continue watching</h3>
-      <label class="toggle"><input type="checkbox" bind:checked={settings.showContinueWatching} />Show row</label>
+      <div class="toggle"><span>Show row</span><Switch bind:checked={settings.showContinueWatching} label="Show row" /></div>
       <div class="opt"><span>Cards</span>
         <div class="seg">
           {#each [['wide', 'Wide'], ['poster', 'Posters']] as [v, l] (v)}
@@ -421,68 +456,129 @@
 
 <style>
   .studio {
-    position: fixed; top: 0; right: 0; bottom: 0; width: 392px; z-index: 50;
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 50;
     display: flex; flex-direction: column;
-    background: color-mix(in srgb, var(--bg-2) 92%, transparent); backdrop-filter: blur(24px);
-    border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgb(0 0 0 / 0.35);
-    transform: translateX(105%); transition: transform 260ms var(--ease);
+    background: var(--bg-2); border-left: 1px solid var(--line);
+    box-shadow: -24px 0 60px rgb(0 0 0 / 0.4);
+    transform: translateX(105%); transition: transform 280ms var(--ease); will-change: transform;
   }
   .studio.open { transform: none; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 16px 16px 10px 20px; }
-  .ttl { font-family: var(--font-display); font-size: 18px; font-weight: 800; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 18px 16px 12px 22px; }
+  .ttl { font-family: var(--font-display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
   .small { font-size: 12.5px; }
   .tiny { font-size: 11px; padding-left: 52px; }
-  .tabs { display: flex; gap: 2px; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
+
+  .tabs { display: flex; gap: 2px; margin: 0 14px 4px; padding: 3px; border-radius: 12px; background: var(--bg-3); }
   .tabs button {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; border: 0;
-    background: none; border-radius: 8px; cursor: pointer; color: var(--text-3); font-size: 11.5px; font-weight: 600;
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0 6px; border: 0;
+    background: none; border-radius: 9px; cursor: pointer; color: var(--text-2); font-size: 11.5px; font-weight: 600;
+    transition: background var(--dur), color var(--dur);
   }
-  .tabs button:hover { color: var(--text); background: var(--bg-3); }
-  .tabs button.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
-  .body { flex: 1; overflow-y: auto; padding: 4px 20px 30px; }
-  h3 { font-family: var(--font); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin: 22px 0 10px; display: flex; gap: 8px; align-items: baseline; }
-  .link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font-size: 11.5px; text-transform: none; letter-spacing: 0; }
-  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.on { color: var(--text); background: var(--bg-2); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); }
+  .tabs button.on :global(svg) { color: var(--accent); }
+
+  .body { flex: 1; overflow-y: auto; padding: 4px 22px 40px; overscroll-behavior: contain; }
+  h3 {
+    font-family: var(--font); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3);
+    margin: 24px 0 10px; display: flex; gap: 8px; align-items: baseline; font-weight: 700;
+  }
+  .link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
   .row.gap { margin-top: 14px; flex-wrap: wrap; }
   .grow { flex: 1; min-width: 0; }
 
-  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  /* Theme cards: a tiny mock-up of the app in each palette */
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .preset {
-    display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px; cursor: pointer;
-    border: 2px solid; border-radius: 10px; font-weight: 700; font-size: 12.5px; text-align: left;
+    display: flex; flex-direction: column; gap: 8px; padding: 6px 6px 8px; border: 1px solid var(--line); cursor: pointer;
+    border-radius: 12px; background: var(--bg); text-align: left; color: var(--text);
+    transition: border-color var(--dur), transform var(--dur) var(--ease), box-shadow var(--dur);
   }
-  .sw { display: flex; gap: 3px; }
-  .sw i { width: 14px; height: 14px; border-radius: 50%; }
+  .preset:hover { border-color: var(--text-3); transform: translateY(-1px); }
+  .preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mock {
+    position: relative; display: grid; grid-template-columns: 14px 1fr; grid-template-rows: 30px 1fr; gap: 4px;
+    height: 74px; padding: 5px; border-radius: 8px; border: 1px solid; overflow: hidden;
+  }
+  .m-rail { grid-row: 1 / 3; border-radius: 4px; }
+  .m-hero { position: relative; border-radius: 4px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; }
+  .m-line { display: block; height: 3px; width: 46%; border-radius: 2px; opacity: 0.9; }
+  .m-line.short { width: 30%; opacity: 0.7; }
+  .m-btn { position: absolute; left: 6px; bottom: 4px; width: 22px; height: 6px; border-radius: 3px; }
+  .m-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .m-cards i { border-radius: 3px; }
+  .pname { display: flex; align-items: center; gap: 7px; padding: 0 4px; font-size: 12.5px; font-weight: 700; }
+  .pname .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .check {
+    margin-left: auto; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent); color: var(--on-accent);
+  }
 
-  .colors { display: grid; grid-template-columns: 1fr; gap: 6px; }
-  .color { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-  .color span { flex: 1; color: var(--text-2); }
-  .color input[type='color'] { width: 30px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: none; cursor: pointer; }
-  .hex { width: 92px; height: 28px; padding: 0 8px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  /* Accent dots */
+  .accents { display: flex; flex-wrap: wrap; gap: 9px; }
+  .acc {
+    width: 28px; height: 28px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: var(--c);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.2); transition: transform var(--dur) var(--ease);
+  }
+  .acc:hover { transform: scale(1.12); }
+  .acc.on { box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--c, var(--accent)); }
+  .acc.custom {
+    position: relative; overflow: hidden; display: block;
+    background: conic-gradient(#ff4d4d, #ffcc33, #4fd087, #33c3ff, #8b6cff, #ff4dc4, #ff4d4d);
+  }
+  .acc.custom.on { --c: var(--accent); }
+  .acc.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
-  .fonts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  /* Fine-tune colors */
+  .fine { margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .fine summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 14px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: var(--text-2); list-style: none;
+  }
+  .fine summary::-webkit-details-marker { display: none; }
+  .fine summary::after { content: ''; width: 7px; height: 7px; border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3); transform: rotate(45deg); margin-left: 4px; transition: transform var(--dur); }
+  .fine[open] summary::after { transform: rotate(-135deg); }
+  .fine summary .link { margin-left: auto; }
+  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 10px 12px; }
+  .color { display: flex; align-items: center; gap: 9px; padding: 6px; border-radius: 9px; cursor: pointer; }
+  .color:hover { background: var(--bg-3); }
+  .cw { position: relative; width: 28px; height: 28px; border-radius: 8px; overflow: hidden; flex-shrink: 0; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent); }
+  .cw input { position: absolute; inset: -8px; width: 44px; height: 44px; border: 0; padding: 0; cursor: pointer; }
+  .cl { display: flex; flex-direction: column; font-size: 12px; color: var(--text-2); min-width: 0; }
+  .hex { width: 100%; border: 0; background: none; padding: 0; font: 600 12px ui-monospace, Consolas, monospace; color: var(--text); outline: none; text-transform: lowercase; }
+
+  /* Fonts */
+  .fonts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .font {
-    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
-    background: var(--bg); cursor: pointer; font-size: 12.5px; text-align: left; color: var(--text-2);
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); cursor: pointer; text-align: left; color: var(--text-2);
+    transition: border-color var(--dur), color var(--dur);
   }
-  .font span { font-size: 20px; color: var(--text); width: 28px; }
-  .font.on { border-color: var(--accent); color: var(--text); }
+  .font:hover { border-color: var(--text-3); color: var(--text); }
+  .font.on { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px var(--accent); }
+  .aa { font-size: 21px; line-height: 1; color: var(--text); width: 30px; flex-shrink: 0; }
+  .fname { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+  /* Option rows */
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .opt > span { font-size: 13px; color: var(--text-2); flex-shrink: 0; }
   .opt .select { width: 220px; height: 32px; }
-  .slider { display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .slider { display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
   .slider span { color: var(--text-2); }
-  .slider b { font-weight: 600; font-size: 12px; text-align: right; color: var(--text-2); }
-  .toggle { display: flex; align-items: center; gap: 10px; padding: 5px 0; cursor: pointer; font-size: 13px; }
-  .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .slider b { font-weight: 600; font-size: 12px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--text-2); }
+  label.toggle { justify-content: flex-start; cursor: pointer; color: var(--text); }
 
-  .navs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px; }
+  /* Navigation picker */
+  .navs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
   .navopt {
     display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; font-size: 11.5px; font-weight: 600;
-    border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text-2); cursor: pointer;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text-2); cursor: pointer;
+    transition: border-color var(--dur), color var(--dur);
   }
-  .navopt.on { border-color: var(--accent); color: var(--text); }
+  .navopt:hover { border-color: var(--text-3); }
+  .navopt.on { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px var(--accent); }
   .mini { position: relative; width: 44px; height: 30px; border-radius: 4px; background: var(--bg-3); overflow: hidden; }
   .mini i { position: absolute; background: var(--accent); opacity: 0.85; }
   .mini b { position: absolute; background: var(--text-3); opacity: 0.4; border-radius: 2px; }
@@ -499,25 +595,27 @@
   .li:hover { background: var(--bg-3); }
   .li.off { opacity: 0.5; }
 
+  /* Home rows */
   .rows { display: flex; flex-direction: column; gap: 6px; }
-  .rowcard { padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: grab; }
+  .rowcard { padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: grab; }
   .rowcard.off { opacity: 0.5; }
   .rowcard.dragging { opacity: 0.3; }
   .rowtop { display: flex; align-items: center; gap: 8px; }
-  .rowtop input[type='checkbox'] { accent-color: var(--accent); }
   .grip { color: var(--text-3); display: grid; }
   .bare { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-weight: 600; font-size: 13px; padding: 4px 0; }
   .bare::placeholder { color: var(--text); opacity: 0.9; }
   .bare:focus::placeholder { opacity: 0.4; }
   .mini-select { height: 26px; border: 1px solid var(--line); background: var(--bg-2); border-radius: 6px; font-size: 12px; padding: 0 4px; }
 
+  /* CSS tab */
   .code { font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace; font-size: 12.5px; min-height: 240px; background: var(--bg); }
   .cheat { margin-top: 12px; font-size: 13px; }
   .cheat summary { cursor: pointer; color: var(--text-2); font-weight: 600; }
   pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; white-space: pre-wrap; margin: 4px 0 10px; }
   code { background: var(--bg-3); padding: 1px 4px; border-radius: 4px; }
 
-  .theme { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-  .dot { width: 22px; height: 22px; border-radius: 50%; border: 3px solid; flex-shrink: 0; }
+  /* Saved themes */
+  .theme { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .theme .dot { width: 24px; height: 24px; border-radius: 50%; border: 3px solid; flex-shrink: 0; }
   .tname { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

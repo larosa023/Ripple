@@ -24,25 +24,29 @@
 {/if}
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; contain: strict; }
   .img { position: absolute; background-size: cover; background-position: center; }
   .dim { position: absolute; inset: 0; background: var(--bg); }
 
+  /* Soft glows drawn with gradients (no blur filter) and moved with transforms only, so the GPU
+     composites them cheaply and nothing behind or in front has to re-render each frame. */
+  .aurora { position: absolute; inset: 0; }
   .aurora span {
-    position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(90px); opacity: 0.35;
-    background: var(--accent); animation: drift 26s ease-in-out infinite alternate;
+    position: absolute; width: 90vmax; height: 90vmax; border-radius: 50%; opacity: 0.32;
+    background: radial-gradient(closest-side, var(--accent), transparent);
+    animation: drift 30s ease-in-out infinite alternate; will-change: transform;
   }
-  .aurora span:nth-child(1) { top: -25vmax; left: -15vmax; }
+  .aurora span:nth-child(1) { top: -45vmax; left: -30vmax; }
   .aurora span:nth-child(2) {
-    bottom: -30vmax; right: -20vmax; animation-duration: 32s; animation-delay: -8s;
-    background: color-mix(in srgb, var(--accent) 50%, #7a3cff);
+    bottom: -50vmax; right: -35vmax; animation-duration: 36s; animation-delay: -10s;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 55%, #7a3cff), transparent);
   }
   .aurora span:nth-child(3) {
-    top: 30%; left: 40%; width: 40vmax; height: 40vmax; animation-duration: 38s; opacity: 0.2;
-    background: color-mix(in srgb, var(--accent) 40%, #00d4ff);
+    top: 15%; left: 30%; width: 60vmax; height: 60vmax; animation-duration: 42s; opacity: 0.18;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 45%, #00d4ff), transparent);
   }
   @keyframes drift {
-    to { transform: translate(12vmax, 8vmax) scale(1.15); }
+    to { transform: translate3d(10vmax, 7vmax, 0) scale(1.12); }
   }
 
   .bokeh span {
@@ -50,11 +54,11 @@
     position: absolute; width: var(--size); height: var(--size); border-radius: 50%;
     left: calc((var(--i) * 37%) % 100%); top: calc((var(--i) * 53%) % 100%);
     background: radial-gradient(circle, color-mix(in srgb, var(--accent) 70%, transparent), transparent 70%);
-    opacity: 0.4; animation: float 18s ease-in-out infinite alternate;
+    opacity: 0.4; animation: float 18s ease-in-out infinite alternate; will-change: transform, opacity;
     animation-delay: calc(var(--i) * -1.7s);
   }
   @keyframes float {
-    to { transform: translate(40px, -60px); opacity: 0.15; }
+    to { transform: translate3d(40px, -60px, 0); opacity: 0.15; }
   }
   :global(:root[data-motion='reduce']) .aurora span,
   :global(:root[data-motion='reduce']) .bokeh span { animation: none; }
