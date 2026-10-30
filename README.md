@@ -58,7 +58,7 @@ src/
 src-tauri/        Rust shell: HTTP (no CORS), external player launcher
 ```
 
-Releases: push a tag like `v0.1.0` and GitHub Actions builds the Windows installers into a draft release.
+Releases: push a tag like `v0.1.0` and GitHub Actions builds the Windows installers and publishes a release.
 
 ## Disclaimer
 
