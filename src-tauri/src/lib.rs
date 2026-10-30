@@ -1,4 +1,5 @@
 mod player;
+mod updater;
 
 pub fn run() {
     tauri::Builder::default()
@@ -6,7 +7,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             player::play_external,
-            player::detect_players
+            player::detect_players,
+            updater::check_update,
+            updater::install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ripple");

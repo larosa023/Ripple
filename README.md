@@ -19,6 +19,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Plays in mpv, VLC, or any player you choose.** Custom path and arguments, automatic subtitles from subtitle addons in your languages, optional auto-play of the top stream.
 - **Library**: saved titles, watch history, watched episodes.
 - **Make it yours**: dark / OLED / light themes, any accent color, poster size, compact sidebar, start page, reduced motion.
+- **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
 - **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back.
 
@@ -58,7 +59,7 @@ src/
 src-tauri/        Rust shell: HTTP (no CORS), external player launcher
 ```
 
-Releases: every push to `main` builds the Windows installers and publishes them to a GitHub Release named after the version in `src-tauri/tauri.conf.json`. Bump the version (also in `package.json` and `src-tauri/Cargo.toml`) to cut a new release.
+Releases: every push to `main` builds the Windows installers and publishes them to a GitHub Release named after the version in `src-tauri/tauri.conf.json`. Bump the version (also in `package.json` and `src-tauri/Cargo.toml`) to cut a new release; installed copies will then offer the update. Pushes without a version bump don't trigger updates.
 
 ## Disclaimer
 

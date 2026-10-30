@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import UpdateBanner from './lib/components/UpdateBanner.svelte';
+  import { checkForUpdate, loadVersion } from './lib/stores/updater.svelte';
   import { setRequestTimeout } from './lib/stremio/client';
   import { refreshAddons } from './lib/stores/addons.svelte';
   import { go, router } from './lib/stores/router.svelte';
@@ -34,6 +36,9 @@
     // Refresh manifests in the background so new catalogs appear without blocking startup.
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback ?? ((cb) => setTimeout(cb, 1500));
     idle(() => void refreshAddons());
+    void loadVersion();
+    // Look for a newer GitHub release a few seconds after launch.
+    if (settings.checkUpdates) setTimeout(() => void checkForUpdate(), 4000);
   });
 
   function onKey(e: KeyboardEvent) {
@@ -52,14 +57,18 @@
 <div class="shell">
   <Sidebar />
   <main>
+    <UpdateBanner />
+    <div class="view">
     {#key router.route.name === 'detail' ? router.route.params.join('/') : router.route.name}
       <Page />
     {/key}
+    </div>
   </main>
 </div>
 <Toasts />
 
 <style>
   .shell { display: flex; height: 100%; }
-  main { flex: 1; min-width: 0; height: 100%; }
+  main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+  .view { flex: 1; min-height: 0; }
 </style>

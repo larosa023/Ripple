@@ -40,8 +40,9 @@ export interface Settings {
   onlyDirect: boolean;
   qualities: Quality[];
   excludeKeywords: string;
-  // Network
+  // Network & updates
   requestTimeoutSec: number;
+  checkUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   qualities: [],
   excludeKeywords: '',
   requestTimeoutSec: 12,
+  checkUpdates: true,
 };
 
 export const settings: Settings = $state(load('settings', DEFAULT_SETTINGS));

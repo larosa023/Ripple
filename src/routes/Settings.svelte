@@ -9,6 +9,7 @@
   import { exportAll, importAll } from '../lib/stores/persist';
   import { resetSettings, settings } from '../lib/stores/settings.svelte';
   import { toast } from '../lib/stores/toast.svelte';
+  import { checkForUpdate, installUpdate, updater } from '../lib/stores/updater.svelte';
 
   const ACCENTS = ['#5b8cff', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#22c55e', '#14b8a6', '#e8ebf2'];
   const QUALITIES: Quality[] = ['4K', '1080p', '720p', '480p', 'SD'];
@@ -203,7 +204,32 @@
     </div>
   </section>
 
-  <p class="faint small about">Ripple 0.1.0 · Works with any Stremio addon. Ripple doesn't host or provide any content.</p>
+  <section class="card">
+    <h2>Updates</h2>
+    <div class="field">
+      <span>Version</span>
+      <div class="upd">
+        <strong>{updater.version || 'dev'}</strong>
+        {#if updater.status === 'available' && updater.info}
+          <span class="chip accent">{updater.info.version} available</span>
+          <button class="btn primary sm" onclick={installUpdate}>Update now</button>
+        {:else if updater.status === 'installing'}
+          <span class="faint">Downloading… Ripple will restart</span>
+        {:else}
+          <button class="btn sm" disabled={updater.status === 'checking'} onclick={async () => {
+            await checkForUpdate();
+            if (updater.status === 'none') toast("You're on the latest version", 'success');
+          }}>
+            <Icon name="refresh" size={14} />{updater.status === 'checking' ? 'Checking…' : 'Check for updates'}
+          </button>
+          {#if updater.status === 'error'}<span class="faint small">{updater.error}</span>{/if}
+        {/if}
+      </div>
+    </div>
+    <label class="toggle"><input type="checkbox" bind:checked={settings.checkUpdates} />Check for updates when Ripple starts</label>
+  </section>
+
+  <p class="faint small about">Works with any Stremio addon. Ripple doesn't host or provide any content.</p>
 </div>
 
 <style>
@@ -230,4 +256,5 @@
   .btns { display: flex; gap: 8px; flex-wrap: wrap; }
   code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
   .about { margin-top: 10px; }
+  .upd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 </style>

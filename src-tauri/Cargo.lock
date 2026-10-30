@@ -3098,8 +3098,9 @@ dependencies = [
 
 [[package]]
 name = "ripple"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
+ "semver",
  "serde",
  "serde_json",
  "tauri",
