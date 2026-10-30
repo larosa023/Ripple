@@ -24,7 +24,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 
 ## Install
 
-Grab the latest installer from [Releases](../../releases) (or from the latest [Build](../../actions) run's artifacts).
+Grab the latest installer from [Releases](../../releases) (the `.exe` is the one to grab).
 
 You'll also want a player. mpv is recommended:
 
@@ -58,7 +58,7 @@ src/
 src-tauri/        Rust shell: HTTP (no CORS), external player launcher
 ```
 
-Releases: push a tag like `v0.1.0` and GitHub Actions builds the Windows installers and publishes a release.
+Releases: every push to `main` builds the Windows installers and publishes them to a GitHub Release named after the version in `src-tauri/tauri.conf.json`. Bump the version (also in `package.json` and `src-tauri/Cargo.toml`) to cut a new release.
 
 ## Disclaimer
 
