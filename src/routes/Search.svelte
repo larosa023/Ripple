@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '../lib/components/Icon.svelte';
+  import { dragScroll } from '../lib/actions/dragScroll';
   import PosterCard from '../lib/components/PosterCard.svelte';
   import { getCatalog, supportsSearch } from '../lib/stremio/client';
   import type { MetaPreview } from '../lib/stremio/types';
@@ -87,7 +88,7 @@
     {#each groups as g (g.key)}
       <section>
         <h2>{g.title} <span class="faint">{g.source}</span></h2>
-        <div class="scroller">
+        <div class="scroller" use:dragScroll>
           {#each g.items as meta (meta.id)}<PosterCard {meta} />{/each}
         </div>
       </section>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import CatalogRow from '../lib/components/CatalogRow.svelte';
   import Hero from '../lib/components/Hero.svelte';
+  import { dragScroll } from '../lib/actions/dragScroll';
   import PosterCard from '../lib/components/PosterCard.svelte';
   import { boardCatalogs, syncRows } from '../lib/home';
   import { addons } from '../lib/stores/addons.svelte';
@@ -40,7 +41,7 @@
   {#if settings.showContinueWatching && library.history.length}
     <section class="cw">
       <h2>Continue watching</h2>
-      <div class="scroller">
+      <div class="scroller" use:dragScroll>
         {#each library.history.slice(0, 20) as h (h.meta.id)}
           <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} />
         {/each}

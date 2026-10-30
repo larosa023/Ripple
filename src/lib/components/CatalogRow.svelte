@@ -7,6 +7,7 @@
   import { go } from '../stores/router.svelte';
   import PosterCard from './PosterCard.svelte';
   import Icon from './Icon.svelte';
+  import { dragScroll } from '../actions/dragScroll';
 
   let {
     addon,
@@ -71,7 +72,7 @@
         <button class="icon-btn" onclick={() => scroll(1)} aria-label="Scroll right"><Icon name="chevronRight" /></button>
       </div>
     </header>
-    <div class="scroller" bind:this={scroller}>
+    <div class="scroller" use:dragScroll bind:this={scroller}>
       {#if status === 'done'}
         {#each shown as meta, i (meta.id)}
           <PosterCard {meta} variant={display} rank={i + 1} />

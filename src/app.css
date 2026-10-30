@@ -107,6 +107,11 @@ input[type='range'] { accent-color: var(--accent); }
   scrollbar-width: none;
 }
 .scroller::-webkit-scrollbar { display: none; }
+/* Click-and-drag panning (see actions/dragScroll.ts) */
+.scroller { cursor: grab; }
+.scroller.dragging { cursor: grabbing; user-select: none; }
+.scroller.dragging * { pointer-events: none; }
+.scroller img { -webkit-user-drag: none; user-select: none; }
 
 .skeleton {
   background: linear-gradient(90deg, var(--bg-2) 0%, var(--bg-3) 50%, var(--bg-2) 100%);

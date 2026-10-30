@@ -21,6 +21,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
   - **Title pages**: cinematic or classic layout, backdrop strength, episodes as list or grid.
   - **Backgrounds**: your own image with dim and blur, or animated aurora / bokeh.
   - **Custom CSS** with a cheat sheet, and a **theme library**: save looks, share them as `.ripplestyle` files, import others'.
+- **Drag to scroll**: click and drag any row to pan through it, with momentum.
 - **Discover** with type tabs, catalog picker, genre filter, and infinite scroll.
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
 - **Smart stream list.** Streams appear as each addon responds, with quality, size, and HDR/DV/REMUX/cached tags. Sort by quality, size, or addon order; filter by quality, hide CAM releases, hide keywords, or show direct links only. Per-addon filter pills.
