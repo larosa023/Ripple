@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Sidebar from './lib/components/Sidebar.svelte';
+  import Backdrop from './lib/components/Backdrop.svelte';
+  import Nav from './lib/components/Nav.svelte';
+  import Studio from './lib/components/Studio.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import { checkForUpdate, loadVersion } from './lib/stores/updater.svelte';
@@ -8,6 +10,7 @@
   import { refreshAddons } from './lib/stores/addons.svelte';
   import { go, router } from './lib/stores/router.svelte';
   import { settings } from './lib/stores/settings.svelte';
+  import { applyLook, look } from './lib/theme/look.svelte';
   import Addons from './routes/Addons.svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -19,14 +22,9 @@
   const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, addons: Addons, settings: Settings };
   const Page = $derived(pages[router.route.name]);
 
-  // Apply appearance settings to the document root.
+  // Apply the whole look (colors, fonts, layout attributes, custom CSS) whenever any part changes.
   $effect(() => {
-    const root = document.documentElement;
-    root.dataset.theme = settings.theme;
-    root.dataset.poster = settings.posterSize;
-    root.dataset.motion = settings.reduceMotion ? 'reduce' : '';
-    root.style.setProperty('--accent', settings.accent);
-    root.style.setProperty('--sidebar', settings.compactSidebar ? '64px' : '76px');
+    applyLook($state.snapshot(look) as typeof look);
   });
 
   $effect(() => setRequestTimeout(settings.requestTimeoutSec * 1000));
@@ -54,21 +52,27 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="shell">
-  <Sidebar />
+<Backdrop />
+<div class="shell" class:column={look.nav === 'top'} class:has-bg={!!look.bgImage || look.bgAnimation !== 'none'}>
+  <Nav />
   <main>
     <UpdateBanner />
     <div class="view">
-    {#key router.route.name === 'detail' ? router.route.params.join('/') : router.route.name}
-      <Page />
-    {/key}
+      {#key router.route.name === 'detail' ? router.route.params.join('/') : router.route.name}
+        <Page />
+      {/key}
     </div>
   </main>
 </div>
+<Studio />
 <Toasts />
 
 <style>
-  .shell { display: flex; height: 100%; }
-  main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+  .shell { position: relative; z-index: 1; display: flex; height: 100%; }
+  .shell.column { flex-direction: column; }
+  main { flex: 1; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; }
   .view { flex: 1; min-height: 0; }
+  /* Let a custom background show through the main area. */
+  :global(html:has(.shell.has-bg)) { background: var(--bg); }
+  :global(html:has(.shell.has-bg) body) { background: transparent; }
 </style>

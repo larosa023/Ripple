@@ -180,7 +180,7 @@
     border: 1px solid var(--line); background: none; height: 26px; padding: 0 10px; border-radius: 13px;
     font-size: 12px; cursor: pointer; color: var(--text-2);
   }
-  .pill.on { background: var(--accent); border-color: transparent; color: #fff; }
+  .pill.on { background: var(--accent); border-color: transparent; color: var(--on-accent); }
   .list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
   .stream {
     display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer;

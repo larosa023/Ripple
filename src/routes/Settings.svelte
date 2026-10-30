@@ -1,17 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from '../lib/components/Icon.svelte';
-  import { boardCatalogs, syncRows } from '../lib/home';
   import { detectPlayers, type DetectedPlayer } from '../lib/player';
   import { clearCache } from '../lib/stremio/client';
   import type { Quality } from '../lib/stremio/streams';
-  import { addons } from '../lib/stores/addons.svelte';
   import { exportAll, importAll } from '../lib/stores/persist';
   import { resetSettings, settings } from '../lib/stores/settings.svelte';
   import { toast } from '../lib/stores/toast.svelte';
+  import { openStudio } from '../lib/stores/ui.svelte';
   import { checkForUpdate, installUpdate, updater } from '../lib/stores/updater.svelte';
 
-  const ACCENTS = ['#5b8cff', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#22c55e', '#14b8a6', '#e8ebf2'];
   const QUALITIES: Quality[] = ['4K', '1080p', '720p', '480p', 'SD'];
 
   let detected: DetectedPlayer[] = $state([]);
@@ -21,21 +19,6 @@
     detected = await detectPlayers().catch(() => []);
   });
 
-  const available = $derived(boardCatalogs(addons.list, settings.hideAdultAddons));
-  const rows = $derived(syncRows(settings.homeRows, available).map((r) => ({ ...r, cat: available.find((b) => b.key === r.key)! })));
-
-  function moveRow(i: number, dir: -1 | 1) {
-    const next = syncRows($state.snapshot(settings.homeRows), available);
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    settings.homeRows = next;
-  }
-  function toggleRow(i: number) {
-    const next = syncRows($state.snapshot(settings.homeRows), available);
-    next[i].enabled = !next[i].enabled;
-    settings.homeRows = next;
-  }
   function toggleQuality(q: Quality) {
     settings.qualities = settings.qualities.includes(q) ? settings.qualities.filter((x) => x !== q) : [...settings.qualities, q];
   }
@@ -65,32 +48,18 @@
   <h1 class="page-title">Settings</h1>
 
   <section class="card">
-    <h2>Appearance</h2>
-    <div class="field">
-      <span>Theme</span>
-      <div class="seg">
-        {#each [['dark', 'Dark'], ['oled', 'OLED black'], ['light', 'Light']] as [v, l] (v)}
-          <button class:on={settings.theme === v} onclick={() => (settings.theme = v as typeof settings.theme)}>{l}</button>
-        {/each}
-      </div>
+    <h2>Appearance &amp; layout</h2>
+    <p class="faint small">Themes, colors, fonts, navigation style, cards, hero banner, home rows and custom CSS all live in the Customize panel, where changes preview live.</p>
+    <div class="btns">
+      <button class="btn primary" onclick={() => openStudio('look')}><Icon name="brush" size={16} />Open Customize</button>
+      <button class="btn" onclick={() => openStudio('home')}>Edit home rows</button>
+      <button class="btn" onclick={() => openStudio('themes')}>Themes</button>
     </div>
-    <div class="field">
-      <span>Accent color</span>
-      <div class="swatches">
-        {#each ACCENTS as c (c)}
-          <button class="sw" class:on={settings.accent === c} style:background={c} aria-label={c} onclick={() => (settings.accent = c)}></button>
-        {/each}
-        <input type="color" bind:value={settings.accent} title="Custom color" />
-      </div>
-    </div>
-    <div class="field">
-      <span>Poster size</span>
-      <div class="seg">
-        {#each [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']] as [v, l] (v)}
-          <button class:on={settings.posterSize === v} onclick={() => (settings.posterSize = v as typeof settings.posterSize)}>{l}</button>
-        {/each}
-      </div>
-    </div>
+    <p class="faint small">Shortcut: Ctrl+Shift+C</p>
+  </section>
+
+  <section class="card">
+    <h2>General</h2>
     <div class="field">
       <span>Start page</span>
       <select class="select w" bind:value={settings.startPage}>
@@ -99,31 +68,7 @@
         <option value="library">Library</option>
       </select>
     </div>
-    <label class="toggle"><input type="checkbox" bind:checked={settings.showTitles} />Show titles under posters</label>
-    <label class="toggle"><input type="checkbox" bind:checked={settings.showRatings} />Show IMDb ratings on posters</label>
-    <label class="toggle"><input type="checkbox" bind:checked={settings.compactSidebar} />Compact sidebar (icons only)</label>
-    <label class="toggle"><input type="checkbox" bind:checked={settings.reduceMotion} />Reduce motion</label>
-  </section>
-
-  <section class="card">
-    <h2>Home screen</h2>
-    <label class="toggle"><input type="checkbox" bind:checked={settings.showContinueWatching} />Show “Continue watching”</label>
     <label class="toggle"><input type="checkbox" bind:checked={settings.hideAdultAddons} />Hide catalogs from 18+ addons</label>
-    <div class="field">
-      <span>Items per row</span>
-      <input class="input w" type="number" min="5" max="100" bind:value={settings.rowItemLimit} />
-    </div>
-    <p class="faint small">Choose which catalogs appear on Home and in what order.</p>
-    <div class="rows">
-      {#each rows as r, i (r.key)}
-        <div class="rowitem" class:off={!r.enabled}>
-          <label class="toggle inline"><input type="checkbox" checked={r.enabled} onchange={() => toggleRow(i)} />{r.cat.title}</label>
-          <span class="faint small">{r.cat.addon.manifest.name}</span>
-          <button class="icon-btn" disabled={i === 0} onclick={() => moveRow(i, -1)} aria-label="Move up"><Icon name="up" size={16} /></button>
-          <button class="icon-btn" disabled={i === rows.length - 1} onclick={() => moveRow(i, 1)} aria-label="Move down"><Icon name="down" size={16} /></button>
-        </div>
-      {/each}
-    </div>
   </section>
 
   <section class="card">
@@ -238,21 +183,9 @@
   .field { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 12px; margin-bottom: 12px; }
   .field > span { color: var(--text-2); font-weight: 600; font-size: 13px; }
   .w { width: 200px; }
-  .seg { display: inline-flex; background: var(--bg-3); border-radius: 9px; padding: 3px; gap: 2px; width: fit-content; }
-  .seg button { border: 0; background: none; padding: 6px 14px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-weight: 600; }
-  .seg button.on { background: var(--accent); color: #fff; }
-  .swatches { display: flex; gap: 8px; align-items: center; }
-  .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
-  .sw.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg-2) inset; }
-  input[type='color'] { width: 30px; height: 30px; border: 0; padding: 0; background: none; cursor: pointer; }
   .toggle { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; }
   .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
-  .toggle.inline { flex: 1; padding: 0; }
   .small { font-size: 12.5px; }
-  .rows { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 360px; overflow-y: auto; }
-  .rowitem { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; }
-  .rowitem:hover { background: var(--bg-3); }
-  .rowitem.off { opacity: 0.55; }
   .btns { display: flex; gap: 8px; flex-wrap: wrap; }
   code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
   .about { margin-top: 10px; }

@@ -1,5 +1,7 @@
+/* Defaults; the active look overrides these on <html> at runtime. */
 :root {
   --accent: #5b8cff;
+  --on-accent: #fff;
   --bg: #0b0d12;
   --bg-2: #12151c;
   --bg-3: #1a1e27;
@@ -10,93 +12,101 @@
   --danger: #ff5d6c;
   --ok: #3ccf91;
   --radius: 10px;
-  --sidebar: 76px;
+  --btn-radius: 8px;
   --poster-w: 150px;
+  --gap: 14px;
+  --page-pad: 32px;
+  --row-gap: 30px;
+  --font: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: var(--font);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur: 160ms;
+  --glass: color-mix(in srgb, var(--bg-2) 62%, transparent);
   color-scheme: dark;
 }
-:root[data-theme='oled'] {
-  --bg: #000;
-  --bg-2: #0a0a0c;
-  --bg-3: #141418;
-  --line: #1f1f25;
-}
-:root[data-theme='light'] {
-  --bg: #f4f5f8;
-  --bg-2: #ffffff;
-  --bg-3: #eceef3;
-  --line: #dde0e8;
-  --text: #141821;
-  --text-2: #4f586b;
-  --text-3: #808899;
-  color-scheme: light;
-}
-:root[data-poster='small'] { --poster-w: 120px; }
-:root[data-poster='large'] { --poster-w: 190px; }
 :root[data-motion='reduce'] { --dur: 0ms; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
 body {
-  font: 14px/1.45 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font: 14px/1.45 var(--font);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 #app { height: 100%; }
+h1, h2, h3, .display { font-family: var(--font-display); }
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 img { display: block; }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* Shared controls */
 .btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 36px; padding: 0 14px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 36px; padding: 0 16px; border-radius: var(--btn-radius);
   border: 1px solid var(--line); background: var(--bg-3); cursor: pointer;
-  transition: background var(--dur), border-color var(--dur), transform var(--dur);
+  transition: background var(--dur), border-color var(--dur), transform var(--dur), filter var(--dur);
   white-space: nowrap;
 }
 .btn:hover { border-color: var(--text-3); }
 .btn:active { transform: scale(0.98); }
-.btn.primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.1); }
 .btn.ghost { background: transparent; border-color: transparent; }
 .btn.ghost:hover { background: var(--bg-3); }
+.btn.glass { background: color-mix(in srgb, #000 35%, transparent); border-color: rgb(255 255 255 / 0.18); color: #fff; backdrop-filter: blur(10px); }
 .btn.danger { color: var(--danger); }
-.btn.sm { height: 30px; padding: 0 10px; font-size: 13px; }
+.btn.sm { height: 30px; padding: 0 11px; font-size: 13px; }
+.btn.lg { height: 44px; padding: 0 22px; font-size: 15px; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .icon-btn {
-  width: 34px; height: 34px; display: grid; place-items: center;
-  border-radius: 8px; border: 0; background: transparent; cursor: pointer; color: var(--text-2);
+  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
+  border-radius: var(--btn-radius); border: 0; background: transparent; cursor: pointer; color: var(--text-2);
 }
 .icon-btn:hover { background: var(--bg-3); color: var(--text); }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
 
 .input, .select, .textarea {
-  height: 36px; padding: 0 12px; border-radius: 8px;
+  height: 36px; padding: 0 12px; border-radius: min(var(--btn-radius), 10px);
   border: 1px solid var(--line); background: var(--bg-2); outline: none; width: 100%;
 }
 .textarea { height: auto; padding: 10px 12px; resize: vertical; }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--accent); }
+input[type='range'] { accent-color: var(--accent); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.page { height: 100%; overflow-y: auto; padding: 28px 36px 60px; }
+.page { height: 100%; overflow-y: auto; padding: 28px var(--page-pad) 60px; }
+:root[data-nav='dock'] .page { padding-bottom: 110px; }
 .page-title { font-size: 26px; font-weight: 700; margin: 0 0 20px; letter-spacing: -0.02em; }
 .muted { color: var(--text-2); }
 .faint { color: var(--text-3); }
 .chip {
-  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px;
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: min(var(--btn-radius), 6px);
   font-size: 11px; font-weight: 600; background: var(--bg-3); color: var(--text-2); letter-spacing: 0.02em;
 }
 .chip.accent { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); }
 .empty { padding: 60px 20px; text-align: center; color: var(--text-2); }
+
+/* Segmented control */
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--bg-3); border-radius: min(var(--btn-radius), 10px); padding: 3px; gap: 2px; }
+.seg button {
+  border: 0; background: none; padding: 6px 12px; border-radius: min(var(--btn-radius), 8px); cursor: pointer;
+  color: var(--text-2); font-weight: 600; font-size: 13px;
+}
+.seg button.on { background: var(--accent); color: var(--on-accent); }
+
+/* Horizontal scrollers used by rows */
+.scroller {
+  display: flex; gap: var(--gap); overflow-x: auto; overflow-y: hidden; padding: 6px 2px 12px;
+  scrollbar-width: none;
+}
+.scroller::-webkit-scrollbar { display: none; }
 
 .skeleton {
   background: linear-gradient(90deg, var(--bg-2) 0%, var(--bg-3) 50%, var(--bg-2) 100%);

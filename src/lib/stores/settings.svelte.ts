@@ -1,26 +1,21 @@
 import type { Quality, StreamSort } from '../stremio/streams';
 import { load, save } from './persist';
 
-export type Theme = 'dark' | 'oled' | 'light';
-export type PosterSize = 'small' | 'medium' | 'large';
 export type PlayerKind = 'mpv' | 'vlc' | 'custom';
 export type StartPage = 'home' | 'discover' | 'library';
+
+export type RowDisplay = 'poster' | 'wide' | 'top10';
 
 export interface HomeRow {
   /** `${addonId}|${type}|${catalogId}` */
   key: string;
   enabled: boolean;
+  /** Custom row title; empty uses the catalog name. */
+  title?: string;
+  display?: RowDisplay;
 }
 
 export interface Settings {
-  // Appearance
-  theme: Theme;
-  accent: string;
-  posterSize: PosterSize;
-  showRatings: boolean;
-  showTitles: boolean;
-  reduceMotion: boolean;
-  compactSidebar: boolean;
   startPage: StartPage;
   // Home
   homeRows: HomeRow[];
@@ -46,13 +41,6 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'dark',
-  accent: '#5b8cff',
-  posterSize: 'medium',
-  showRatings: true,
-  showTitles: true,
-  reduceMotion: false,
-  compactSidebar: false,
   startPage: 'home',
   homeRows: [],
   rowItemLimit: 20,

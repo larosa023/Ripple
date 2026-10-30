@@ -40,7 +40,7 @@
     <div class="grid">
       {#each items as i (i.meta.id)}
         <div class="cell">
-          <PosterCard meta={i.meta} subtitle={i.sub} />
+          <PosterCard meta={i.meta} subtitle={i.sub} fill />
           {#if tab === 'history'}
             <button class="icon-btn rm" title="Remove from history" onclick={() => removeFromHistory(i.meta.id)}><Icon name="x" size={14} /></button>
           {/if}
@@ -59,10 +59,9 @@
   .bar .select { width: auto; }
   .tabs { display: flex; gap: 4px; background: var(--bg-2); border: 1px solid var(--line); padding: 3px; border-radius: 9px; }
   .tab { border: 0; background: none; padding: 6px 14px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-weight: 600; }
-  .tab.active { background: var(--accent); color: #fff; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--poster-w), 1fr)); gap: 22px 16px; }
+  .tab.active { background: var(--accent); color: var(--on-accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--poster-w), 1fr)); gap: calc(var(--gap) * 1.6) var(--gap); }
   .cell { position: relative; }
-  .cell :global(.card) { width: 100%; }
   .rm { position: absolute; top: 4px; left: 4px; width: 26px; height: 26px; background: rgb(0 0 0 / 0.65); color: #fff; opacity: 0; }
   .cell:hover .rm { opacity: 1; }
 </style>

@@ -12,13 +12,20 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 
 - **Every Stremio addon.** Install from any `manifest.json` or `stremio://` link, or import your entire addon collection from your Stremio account in one step.
 - **Addon control.** Enable/disable, drag to reorder priority, open configure pages, update all manifests.
-- **Home you design.** Pick which catalogs show on Home and in what order, items per row, Continue Watching.
+- **Customize studio** (brush icon or `Ctrl+Shift+C`): a live slide-in editor for everything below.
+  - **11 theme presets** plus a full 7-color editor, **8 font pairings** and custom font upload, UI scale, corner radius, button shape.
+  - **5 navigation layouts**: sidebar, labeled rail, icon rail, top bar, floating dock. Hide or reorder nav items.
+  - **5 card styles** (plain, outlined, raised, glass, title overlay), 4 hover effects, 4 sizes, 3 spacing densities.
+  - **Rotating hero banner** (full, compact, or off) from any catalog, with adjustable rotation.
+  - **Home rows you design**: drag to reorder, rename, and show each as posters, wide backdrops, or a Top 10 with rank numerals.
+  - **Title pages**: cinematic or classic layout, backdrop strength, episodes as list or grid.
+  - **Backgrounds**: your own image with dim and blur, or animated aurora / bokeh.
+  - **Custom CSS** with a cheat sheet, and a **theme library**: save looks, share them as `.ripplestyle` files, import others'.
 - **Discover** with type tabs, catalog picker, genre filter, and infinite scroll.
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
 - **Smart stream list.** Streams appear as each addon responds, with quality, size, and HDR/DV/REMUX/cached tags. Sort by quality, size, or addon order; filter by quality, hide CAM releases, hide keywords, or show direct links only. Per-addon filter pills.
 - **Plays in mpv, VLC, or any player you choose.** Custom path and arguments, automatic subtitles from subtitle addons in your languages, optional auto-play of the top stream.
 - **Library**: saved titles, watch history, watched episodes.
-- **Make it yours**: dark / OLED / light themes, any accent color, poster size, compact sidebar, start page, reduced motion.
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
 - **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back.
@@ -54,7 +61,8 @@ npm run check         # type-check
 src/
   lib/stremio/    addon protocol client, account import, stream parsing/sorting
   lib/stores/     settings, addons, library, router (persisted, Svelte 5 runes)
-  lib/components/ sidebar, posters, catalog rows, stream list
+  lib/theme/      look store, presets, fonts, theme files
+  lib/components/ nav, hero, posters, catalog rows, stream list, Customize studio
   routes/         Home, Discover, Search, Detail, Library, Addons, Settings
 src-tauri/        Rust shell: HTTP (no CORS), external player launcher
 ```

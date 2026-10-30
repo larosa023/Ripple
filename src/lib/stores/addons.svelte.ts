@@ -1,6 +1,7 @@
 import { fetchManifest, normalizeManifestUrl } from '../stremio/client';
 import type { InstalledAddon, Manifest } from '../stremio/types';
 import { load, save } from './persist';
+import { settings } from './settings.svelte';
 
 export const CINEMETA_URL = 'https://v3-cinemeta.strem.io/manifest.json';
 
@@ -56,7 +57,10 @@ export async function installAddon(input: string): Promise<InstalledAddon> {
 }
 
 export function removeAddon(transportUrl: string) {
+  const gone = addons.list.find((a) => a.transportUrl === transportUrl && !a.protected);
   addons.list = addons.list.filter((a) => a.transportUrl !== transportUrl || a.protected);
+  // Uninstalling (unlike disabling) also forgets that addon's home row settings.
+  if (gone) settings.homeRows = settings.homeRows.filter((r) => !r.key.startsWith(gone.manifest.id + '|'));
 }
 
 export function toggleAddon(transportUrl: string) {

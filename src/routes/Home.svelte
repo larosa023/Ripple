@@ -1,11 +1,13 @@
 <script lang="ts">
   import CatalogRow from '../lib/components/CatalogRow.svelte';
+  import Hero from '../lib/components/Hero.svelte';
   import PosterCard from '../lib/components/PosterCard.svelte';
   import { boardCatalogs, syncRows } from '../lib/home';
   import { addons } from '../lib/stores/addons.svelte';
   import { library } from '../lib/stores/library.svelte';
   import { href } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
+  import { look } from '../lib/theme/look.svelte';
 
   const available = $derived(boardCatalogs(addons.list, settings.hideAdultAddons));
 
@@ -18,25 +20,36 @@
   const rows = $derived(
     settings.homeRows
       .filter((r) => r.enabled)
-      .map((r) => available.find((b) => b.key === r.key))
+      .map((r) => {
+        const b = available.find((x) => x.key === r.key);
+        return b ? { ...b, title: r.title?.trim() || b.title, display: r.display ?? 'poster' } : null;
+      })
       .filter((b) => !!b),
+  );
+
+  const heroSource = $derived(
+    available.find((b) => b.key === look.heroSource) ?? rows[0] ?? available[0],
   );
 </script>
 
 <div class="page">
+  {#if look.hero !== 'off' && heroSource}
+    {#key heroSource.key}<Hero source={heroSource} />{/key}
+  {/if}
+
   {#if settings.showContinueWatching && library.history.length}
     <section class="cw">
       <h2>Continue watching</h2>
       <div class="scroller">
         {#each library.history.slice(0, 20) as h (h.meta.id)}
-          <PosterCard meta={h.meta} subtitle={h.label} />
+          <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} />
         {/each}
       </div>
     </section>
   {/if}
 
   {#each rows as row (row.key)}
-    <CatalogRow addon={row.addon} catalog={row.catalog} title={row.title} />
+    <CatalogRow addon={row.addon} catalog={row.catalog} title={row.title} display={row.display} />
   {:else}
     <div class="empty">
       <p>No catalogs to show yet.</p>
@@ -46,8 +59,6 @@
 </div>
 
 <style>
-  .cw { margin-bottom: 28px; }
-  h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; }
-  .scroller { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
-  .scroller::-webkit-scrollbar { display: none; }
+  .cw { margin-bottom: var(--row-gap); }
+  h2 { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
 </style>

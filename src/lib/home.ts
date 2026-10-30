@@ -34,13 +34,12 @@ export function boardCatalogs(addons: InstalledAddon[], hideAdult: boolean): Boa
 }
 
 /**
- * Keeps the user's row order/visibility and appends rows from newly
- * installed addons at the end, enabled. Rows from removed addons drop out.
+ * Keeps the user's row order, names and styles, and appends rows from newly
+ * installed addons at the end, enabled. Rows whose addon is disabled or not
+ * loaded yet are kept (just not shown) so their customizations survive.
  */
 export function syncRows(saved: HomeRow[], available: BoardCatalog[]): HomeRow[] {
-  const avail = new Set(available.map((b) => b.key));
-  const kept = saved.filter((r) => avail.has(r.key));
-  const known = new Set(kept.map((r) => r.key));
+  const known = new Set(saved.map((r) => r.key));
   const added = available.filter((b) => !known.has(b.key)).map((b) => ({ key: b.key, enabled: true }));
-  return [...kept, ...added];
+  return added.length ? [...saved, ...added] : saved;
 }

@@ -118,7 +118,7 @@
   {:else}
     <div class="grid">
       {#each items as meta (meta.id)}
-        <PosterCard {meta} />
+        <PosterCard {meta} fill />
       {/each}
     </div>
     {#if loading}<div class="more"><div class="spinner"></div></div>{/if}
@@ -131,8 +131,7 @@
   .filters .select { width: auto; min-width: 180px; }
   .tabs { display: flex; gap: 4px; background: var(--bg-2); border: 1px solid var(--line); padding: 3px; border-radius: 9px; }
   .tab { border: 0; background: none; padding: 6px 14px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-weight: 600; }
-  .tab.active { background: var(--accent); color: #fff; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--poster-w), 1fr)); gap: 22px 16px; }
-  .grid :global(.card) { width: 100%; }
+  .tab.active { background: var(--accent); color: var(--on-accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--poster-w), 1fr)); gap: calc(var(--gap) * 1.6) var(--gap); }
   .more { display: grid; place-items: center; padding: 30px; }
 </style>
