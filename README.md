@@ -18,7 +18,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
   - **5 card styles** (plain, outlined, raised, glass, title overlay), 4 hover effects, 4 sizes, 3 spacing densities.
   - **Rotating hero banner** (full, compact, or off) from any catalog, with adjustable rotation.
   - **Home rows you design**: drag to reorder, rename, and show each as posters, wide backdrops, or a Top 10 with rank numerals.
-  - **Title pages**: cinematic or classic layout, backdrop strength, episodes as list or grid.
+  - **Title pages**: full-bleed backdrop with logo, a big Play / Resume button, cast with photos, trailers, and details; cinematic or classic layout, backdrop strength, episodes as list or grid.
   - **Backgrounds**: your own image with dim and blur, or animated aurora / bokeh.
   - **Custom CSS** with a cheat sheet, and a **theme library**: save looks, share them as `.ripplestyle` files, import others'.
 - **Seamless window**: Ripple draws its own themed title bar (or switch back to the Windows one in Settings).

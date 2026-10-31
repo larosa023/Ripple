@@ -89,7 +89,20 @@ export interface MetaDetail extends MetaPreview {
   videos?: Video[];
   links?: { name: string; category: string; url: string }[];
   trailers?: { source: string; type: string }[];
+  trailerStreams?: { title?: string; ytId: string }[];
   behaviorHints?: { defaultVideoId?: string };
+  released?: string;
+  writer?: string[];
+  country?: string;
+  awards?: string;
+  language?: string;
+  certification?: string;
+  /** Cinemeta extras: cast with photos, directors, writers */
+  app_extras?: {
+    cast?: { name: string; character?: string; photo?: string }[];
+    directors?: { name: string; photo?: string }[];
+    writers?: { name: string; photo?: string }[];
+  };
 }
 
 export interface Subtitle {

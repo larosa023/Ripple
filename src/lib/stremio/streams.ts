@@ -124,7 +124,8 @@ export interface StreamInfo {
   full: string;
 }
 
-const SERVICE_RE = /\[(RD|AD|PM|DL|TB|OC|ED|EN|PK|TRB|DLS|SDB)(\+|⚡)?\]/i;
+// [RD+] / [RD⚡] = cached, [RD] / [RD download] = not cached yet
+const SERVICE_RE = /\[(RD|AD|PM|DL|TB|OC|ED|EN|PK|TRB|DLS|SDB)(\+|⚡)?(?:\s+download)?\]/i;
 // Lines that are only stats (📺 💾 👤 ⚙️ …) or language flags.
 const STAT_EMOJI_RE = /💾|👤|⚙|🔎|📺|🌐|🔊|🗣|⏱|📅|🧲|📦/u;
 const ONLY_FLAGS_RE = /^[\p{Regional_Indicator}\p{Extended_Pictographic}\u{FE0F}\u{200D}\s|/·•,]+$/u;

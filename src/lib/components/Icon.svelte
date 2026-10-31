@@ -30,6 +30,7 @@
     copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
     filter: 'M4 5h16l-6 7.5V19l-4 2v-8.5z',
     pause: 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z',
+    dots: 'M5.5 12h.01M12 12h.01M18.5 12h.01',
     volume: 'M4 9h3.5L12 5v14l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
     volumeLow: 'M4 9h3.5L12 5v14l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6',
     mute: 'M4 9h3.5L12 5v14l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5',
