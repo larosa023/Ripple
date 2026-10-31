@@ -312,6 +312,9 @@
               </div>
             {/each}
           </div>
+          {#if cast.some((c) => c.photo.includes('image.tmdb.org'))}
+            <p class="credit">Cast data from <button class="link" onclick={() => openExternal('https://www.themoviedb.org')}>TMDB</button></p>
+          {/if}
         </section>
       {/if}
 
@@ -425,6 +428,9 @@
   .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .hint { margin: -6px 0 12px; font-size: 12.5px; color: var(--text-3); }
   .hint a { color: var(--accent); }
+  .credit { margin: 4px 0 0; font-size: 11.5px; color: var(--text-3); }
+  .credit .link { padding: 0; border: 0; background: none; font: inherit; color: var(--text-2); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .credit .link:hover { color: var(--accent); }
   .pname { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .role { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

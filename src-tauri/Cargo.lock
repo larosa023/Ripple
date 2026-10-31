@@ -3098,7 +3098,7 @@ dependencies = [
 
 [[package]]
 name = "ripple"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "raw-window-handle",
  "semver",
