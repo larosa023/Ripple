@@ -26,17 +26,18 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Discover** with type tabs, catalog picker, genre filter, and infinite scroll.
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
 - **Smart stream list.** Streams appear as each addon responds, with quality, size, and HDR/DV/REMUX/cached tags. Sort by quality, size, or addon order; filter by quality, hide CAM releases, hide keywords, or show direct links only. Per-addon filter pills.
-- **Plays in mpv, VLC, or any player you choose.** Custom path and arguments, automatic subtitles from subtitle addons in your languages, optional auto-play of the top stream.
+- **Built-in player.** Videos play inside Ripple (powered by mpv, so MKV, HEVC, HDR and surround audio all work) with Ripple's own controls: seek bar with buffer, audio and subtitle track menus, subtitle size, speed, fullscreen, keyboard shortcuts, and resume where you left off. Subtitles from subtitle addons in your languages are added automatically.
+- **Or an external player** (mpv, VLC, or any player you choose) if you prefer.
 - **Library**: saved titles, watch history, watched episodes.
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
-- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back.
+- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `Esc` back.
 
 ## Install
 
 Grab the latest installer from [Releases](../../releases) (the `.exe` is the one to grab).
 
-You'll also want a player. Ripple can install mpv for you in one click (Settings → Playback), or:
+You'll also want a player. Ripple's built-in player uses mpv behind the scenes, and installs it for you in one click the first time you play something. Or install it yourself:
 
 ```powershell
 winget install mpv
@@ -66,7 +67,7 @@ src/
   lib/theme/      look store, presets, fonts, theme files
   lib/components/ nav, hero, posters, catalog rows, stream list, Customize studio
   routes/         Home, Discover, Search, Detail, Library, Addons, Settings
-src-tauri/        Rust shell: HTTP (no CORS), external player launcher
+src-tauri/        Rust shell: HTTP (no CORS), embedded mpv (--wid + JSON IPC), external player launcher, updater
 ```
 
 Releases: every push to `main` builds the Windows installers and publishes them to a GitHub Release named after the version in `src-tauri/tauri.conf.json`. Bump the version (also in `package.json` and `src-tauri/Cargo.toml`) to cut a new release; installed copies will then offer the update. Pushes without a version bump don't trigger updates.

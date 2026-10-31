@@ -210,7 +210,7 @@ fn walk(dir: &Path, names: &[&str], depth: usize, visited: &mut usize) -> Option
 static FOUND: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
 
 /// Finds a player: cached hit, known paths, PATH (live + saved), then a shallow search.
-fn locate(player: &str) -> Option<PathBuf> {
+pub(crate) fn locate(player: &str) -> Option<PathBuf> {
     if let Ok(cache) = FOUND.lock() {
         if let Some((_, p)) = cache.iter().find(|(k, p)| k == player && p.is_file()) {
             return Some(p.clone());
@@ -258,14 +258,14 @@ fn resolve(player: &str, explicit: Option<&str>) -> Result<(String, PathBuf), St
 }
 
 #[cfg(windows)]
-fn hide_console(cmd: &mut Command) {
+pub(crate) fn hide_console(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn hide_console(_cmd: &mut Command) {}
+pub(crate) fn hide_console(_cmd: &mut Command) {}
 
 #[tauri::command]
 pub async fn detect_players() -> Vec<DetectedPlayer> {

@@ -25,6 +25,11 @@ export interface Settings {
   showContinueWatching: boolean;
   hideAdultAddons: boolean;
   // Playback
+  /** Play inside Ripple (embedded mpv) or hand off to an external player. */
+  playIn: 'ripple' | 'external';
+  volume: number;
+  /** Pick up where you left off. */
+  resume: boolean;
   player: PlayerKind;
   playerPath: string;
   playerArgs: string;
@@ -49,6 +54,9 @@ export const DEFAULT_SETTINGS: Settings = {
   rowItemLimit: 20,
   showContinueWatching: true,
   hideAdultAddons: true,
+  playIn: 'ripple',
+  volume: 100,
+  resume: true,
   player: 'mpv',
   playerPath: '',
   playerArgs: '',

@@ -11,6 +11,7 @@
     variant = 'poster',
     rank = 0,
     fill = false,
+    progress = 0,
   }: {
     meta: MetaPreview;
     subtitle?: string;
@@ -19,6 +20,8 @@
     rank?: number;
     /** Stretch to the grid cell instead of the fixed poster width */
     fill?: boolean;
+    /** 0..1 watched fraction, drawn as a bar along the bottom of the art */
+    progress?: number;
   } = $props();
 
   let failed = $state(false);
@@ -59,6 +62,7 @@
           {/if}
         </div>
       {/if}
+      {#if progress > 0}<div class="prog"><i style:width="{Math.min(100, progress * 100)}%"></i></div>{/if}
       <div class="overlay-label">
         <div class="name">{meta.name}</div>
         {#if sub}<div class="sub">{sub}</div>{/if}
@@ -109,6 +113,8 @@
     background: linear-gradient(transparent, rgb(0 0 0 / 0.75));
   }
   .wide-label .logo { width: auto; height: auto; max-width: 60%; max-height: 42px; object-fit: contain; }
+  .prog { position: absolute; left: 8px; right: 8px; bottom: 8px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.3); overflow: hidden; z-index: 1; }
+  .prog i { display: block; height: 100%; background: var(--accent); }
   .below { padding: 8px 2px 2px; }
   .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

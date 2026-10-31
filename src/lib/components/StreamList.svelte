@@ -2,7 +2,9 @@
   import { getStreams } from '../stremio/client';
   import { filterAndSort, formatSize, playableUrl, quality, sizeBytes, streamLabel, tags, type StreamSort } from '../stremio/streams';
   import type { MetaDetail, SourcedStream } from '../stremio/types';
-  import { errorText, installMpv, isNoPlayerError, play } from '../player';
+  import { errorText, installMpv, isNeedMpvError, isNoPlayerError, playExternal, prepare } from '../player';
+  import { openPlayer } from '../stores/playback.svelte';
+  import { isTauri } from '../stremio/http';
   import { enabledAddons } from '../stores/addons.svelte';
   import { recordPlay } from '../stores/library.svelte';
   import { settings } from '../stores/settings.svelte';
@@ -71,11 +73,17 @@
 
   async function start(s: SourcedStream) {
     try {
-      await play(s, { title: label ? `${meta.name} — ${label}` : meta.name, type: meta.type, videoId, addons: enabledAddons() });
-      recordPlay(meta, videoId, label);
-      toast('Opening player…', 'success', 2000);
+      const prepared = await prepare(s, { title: meta.name, type: meta.type, videoId, addons: enabledAddons() });
+      if (!prepared) return; // opened in the browser
+      if (settings.playIn === 'ripple' && isTauri) {
+        await openPlayer(prepared, { title: meta.name, subtitle: label, meta, videoId });
+      } else {
+        await playExternal(prepared, label ? `${meta.name} — ${label}` : meta.name);
+        recordPlay(meta, videoId, label);
+        toast('Opening player…', 'success', 2000);
+      }
     } catch (e) {
-      if (isNoPlayerError(e)) {
+      if (isNeedMpvError(e) || isNoPlayerError(e)) {
         toast(errorText(e), 'error', 12000, { label: 'Install mpv', run: () => installThenPlay(s) });
       } else {
         toast(errorText(e), 'error', 6000);

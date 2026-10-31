@@ -1,7 +1,7 @@
 {
   "name": "ripple",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "A lightweight, fast, customizable Stremio-compatible desktop client.",
   "type": "module",
   "scripts": {

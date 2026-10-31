@@ -3100,6 +3100,7 @@ dependencies = [
 name = "ripple"
 version = "0.3.3"
 dependencies = [
+ "raw-window-handle",
  "semver",
  "serde",
  "serde_json",

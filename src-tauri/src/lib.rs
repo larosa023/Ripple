@@ -1,3 +1,4 @@
+mod embed;
 mod player;
 mod updater;
 
@@ -9,9 +10,17 @@ pub fn run() {
             player::play_external,
             player::detect_players,
             player::install_mpv,
+            embed::player_start,
+            embed::player_command,
+            embed::player_stop,
             updater::check_update,
             updater::install_update
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Ripple");
+        .build(tauri::generate_context!())
+        .expect("error while building Ripple")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                embed::shutdown();
+            }
+        });
 }

@@ -126,8 +126,39 @@
           </div>
 
         {:else if section === 'playback'}
+          {@const mpvFound = detected.find((d) => d.player === 'mpv')}
           <div class="group">
-            <SettingRow title="Player" description="Streams open in this app.">
+            <SettingRow title="Play videos" description={settings.playIn === 'ripple' ? 'Inside Ripple, with its own controls (uses mpv behind the scenes).' : 'In a separate player window.'}>
+              <div class="seg">
+                <button class:on={settings.playIn === 'ripple'} onclick={() => (settings.playIn = 'ripple')}>In Ripple</button>
+                <button class:on={settings.playIn === 'external'} onclick={() => (settings.playIn = 'external')}>External player</button>
+              </div>
+            </SettingRow>
+            {#if settings.playIn === 'ripple'}
+              <SettingRow title="Video engine" description={mpvFound ? `mpv · ${mpvFound.path}` : 'The built-in player uses mpv to decode video.'} wide={!detecting && !mpvFound}>
+                {#if detecting}
+                  <span class="spinner small-spin"></span>
+                {:else if mpvFound}
+                  <span class="ready"><span class="ok-dot static"></span>Ready</span>
+                {:else}
+                  <div class="missing">
+                    <span>mpv isn't installed yet. It's free and installs in about a minute.</span>
+                    <button class="btn primary sm" disabled={installingMpv} onclick={doInstallMpv}>
+                      {#if installingMpv}<span class="spinner small-spin"></span>Installing…{:else}Install mpv{/if}
+                    </button>
+                    <button class="btn sm ghost" disabled={detecting} onclick={redetect}>Check again</button>
+                  </div>
+                {/if}
+              </SettingRow>
+              <SettingRow title="Resume where you left off" description="Pick up from your last position when you reopen something.">
+                <Switch bind:checked={settings.resume} label="Resume where you left off" />
+              </SettingRow>
+            {/if}
+          </div>
+
+          {#if settings.playIn === 'external'}
+          <div class="group">
+            <SettingRow title="External player" description="Streams open in this app.">
               <div class="seg">
                 {#each [['mpv', 'mpv'], ['vlc', 'VLC'], ['custom', 'Custom']] as [v, l] (v)}
                   <button class:on={settings.player === v} onclick={() => (settings.player = v as typeof settings.player)}>{l}</button>
@@ -164,6 +195,7 @@
               <input class="input mono" bind:value={settings.playerArgs} placeholder="--fullscreen" spellcheck="false" />
             </SettingRow>
           </div>
+          {/if}
 
           <div class="group">
             <SettingRow title="Subtitle languages" description="Comma-separated 3-letter codes, in order of preference (eng, spa, fre…).">
@@ -341,6 +373,8 @@
   .status-input { position: relative; display: flex; align-items: center; }
   .status-input .input { padding-left: 30px; }
   .status-input:not(:has(.ok-dot)) .input { padding-left: 12px; }
+  .ready { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ok); }
+  .ok-dot.static { position: static; }
   .ok-dot { position: absolute; left: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
   .missing {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;

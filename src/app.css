@@ -149,3 +149,8 @@ input[type='checkbox']:checked::after { transform: rotate(-45deg) translate(1px,
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* While a video plays, mpv draws behind the (transparent) page; hide the app
+   so only the player controls sit on top of the picture. */
+html.playing, html.playing body { background: transparent !important; }
+html.playing #app > :not(.player):not(.toasts) { visibility: hidden; }

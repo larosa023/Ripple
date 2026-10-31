@@ -43,7 +43,7 @@
       <h2>Continue watching</h2>
       <div class="scroller" use:dragScroll>
         {#each library.history.slice(0, 20) as h (h.meta.id)}
-          <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} />
+          <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} progress={library.progress?.[h.videoId] ? library.progress[h.videoId].t / library.progress[h.videoId].d : 0} />
         {/each}
       </div>
     </section>

@@ -3,6 +3,8 @@
   import Backdrop from './lib/components/Backdrop.svelte';
   import Nav from './lib/components/Nav.svelte';
   import Studio from './lib/components/Studio.svelte';
+  import Player from './lib/components/Player.svelte';
+  import { playback } from './lib/stores/playback.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import TitleBar from './lib/components/TitleBar.svelte';
   import { isTauri } from './lib/stremio/http';
@@ -55,6 +57,7 @@
   });
 
   function onKey(e: KeyboardEvent) {
+    if (playback.active) return; // the player handles its own keys
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName);
     if ((e.ctrlKey && e.key.toLowerCase() === 'k') || (!typing && e.key === '/')) {
       e.preventDefault();
@@ -81,6 +84,7 @@
   </main>
 </div>
 <Studio />
+<Player />
 <Toasts />
 
 <style>

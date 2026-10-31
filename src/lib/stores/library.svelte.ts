@@ -14,13 +14,23 @@ export interface HistoryItem {
   watchedAt: number;
 }
 
+export interface Progress {
+  /** Seconds watched */
+  t: number;
+  /** Duration in seconds */
+  d: number;
+  at: number;
+}
+
 interface LibraryState {
   saved: LibraryItem[];
   history: HistoryItem[];
   watched: string[];
+  /** Playback position per video id, for resuming. */
+  progress: Record<string, Progress>;
 }
 
-export const library: LibraryState = $state(load('library', { saved: [], history: [], watched: [] }));
+export const library: LibraryState = $state(load('library', { saved: [], history: [], watched: [], progress: {} }));
 
 $effect.root(() => {
   $effect(() => {
@@ -61,4 +71,26 @@ export function toggleWatched(videoId: string) {
 
 export function removeFromHistory(id: string) {
   library.history = library.history.filter((h) => h.meta.id !== id);
+}
+
+export function saveProgress(videoId: string, t: number, d: number) {
+  if (!(d > 0) || !(t >= 0)) return;
+  library.progress ??= {};
+  if (d - t < 60 || t / d > 0.95) {
+    // Finished: forget the position and count it as watched.
+    delete library.progress[videoId];
+    if (!library.watched.includes(videoId)) library.watched.push(videoId);
+    return;
+  }
+  library.progress[videoId] = { t: Math.round(t), d: Math.round(d), at: Date.now() };
+  // Keep the map small.
+  const keys = Object.keys(library.progress);
+  if (keys.length > 300) {
+    keys.sort((a, b) => library.progress[a].at - library.progress[b].at).slice(0, keys.length - 300).forEach((k) => delete library.progress[k]);
+  }
+}
+
+export function resumePoint(videoId: string): number {
+  const p = library.progress?.[videoId];
+  return p && p.t > 30 && p.d - p.t > 60 ? p.t : 0;
 }
