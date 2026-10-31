@@ -36,7 +36,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 
 Grab the latest installer from [Releases](../../releases) (the `.exe` is the one to grab).
 
-You'll also want a player. mpv is recommended:
+You'll also want a player. Ripple can install mpv for you in one click (Settings → Playback), or:
 
 ```powershell
 winget install mpv

@@ -8,6 +8,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             player::play_external,
             player::detect_players,
+            player::install_mpv,
             updater::check_update,
             updater::install_update
         ])

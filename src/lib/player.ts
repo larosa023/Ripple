@@ -14,6 +14,26 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return core.invoke<T>(cmd, args);
 }
 
+/** Error prefix the Rust side uses when no player at all could be found. */
+export const NO_PLAYER = 'NO_PLAYER:';
+
+export function isNoPlayerError(e: unknown): boolean {
+  return String((e as Error)?.message ?? e).startsWith(NO_PLAYER);
+}
+
+export function errorText(e: unknown): string {
+  return String((e as Error)?.message ?? e).replace(NO_PLAYER, '');
+}
+
+/** Installs mpv via winget; resolves with its path. Takes up to a minute or two. */
+export async function installMpv(): Promise<string> {
+  if (!isTauri) throw new Error('Install mpv from mpv.io.');
+  const path = await invoke<string>('install_mpv');
+  settings.player = 'mpv';
+  settings.playerPath = '';
+  return path;
+}
+
 export async function detectPlayers(): Promise<DetectedPlayer[]> {
   if (!isTauri) return [];
   return invoke<DetectedPlayer[]>('detect_players');

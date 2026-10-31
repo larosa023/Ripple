@@ -2,11 +2,11 @@
   import { getStreams } from '../stremio/client';
   import { filterAndSort, formatSize, playableUrl, quality, sizeBytes, streamLabel, tags, type StreamSort } from '../stremio/streams';
   import type { MetaDetail, SourcedStream } from '../stremio/types';
-  import { play } from '../player';
+  import { errorText, installMpv, isNoPlayerError, play } from '../player';
   import { enabledAddons } from '../stores/addons.svelte';
   import { recordPlay } from '../stores/library.svelte';
   import { settings } from '../stores/settings.svelte';
-  import { toast } from '../stores/toast.svelte';
+  import { dismiss, toast } from '../stores/toast.svelte';
   import Icon from './Icon.svelte';
   import { untrack } from 'svelte';
 
@@ -67,13 +67,36 @@
     };
   });
 
+  let installing = false;
+
   async function start(s: SourcedStream) {
     try {
       await play(s, { title: label ? `${meta.name} — ${label}` : meta.name, type: meta.type, videoId, addons: enabledAddons() });
       recordPlay(meta, videoId, label);
-      toast(`Opening in ${settings.player === 'custom' ? 'your player' : settings.player}…`, 'success', 2000);
+      toast('Opening player…', 'success', 2000);
     } catch (e) {
-      toast(String((e as Error).message ?? e), 'error', 6000);
+      if (isNoPlayerError(e)) {
+        toast(errorText(e), 'error', 12000, { label: 'Install mpv', run: () => installThenPlay(s) });
+      } else {
+        toast(errorText(e), 'error', 6000);
+      }
+    }
+  }
+
+  async function installThenPlay(s: SourcedStream) {
+    if (installing) return;
+    installing = true;
+    const id = toast('Installing mpv… this can take a minute.', 'info', 120000);
+    try {
+      await installMpv();
+      dismiss(id);
+      toast('mpv installed', 'success', 2500);
+      await start(s);
+    } catch (e) {
+      dismiss(id);
+      toast(errorText(e), 'error', 9000);
+    } finally {
+      installing = false;
     }
   }
 

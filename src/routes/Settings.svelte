@@ -3,7 +3,7 @@
   import Icon from '../lib/components/Icon.svelte';
   import SettingRow from '../lib/components/SettingRow.svelte';
   import Switch from '../lib/components/Switch.svelte';
-  import { detectPlayers, openExternal, type DetectedPlayer } from '../lib/player';
+  import { detectPlayers, errorText, installMpv, openExternal, type DetectedPlayer } from '../lib/player';
   import { clearCache } from '../lib/stremio/client';
   import type { Quality } from '../lib/stremio/streams';
   import { exportAll, importAll } from '../lib/stores/persist';
@@ -30,8 +30,30 @@
   let detected: DetectedPlayer[] = $state([]);
   let fileInput: HTMLInputElement | undefined = $state();
 
-  onMount(async () => {
+  let detecting = $state(true);
+  let installingMpv = $state(false);
+
+  async function redetect() {
+    detecting = true;
     detected = await detectPlayers().catch(() => []);
+    detecting = false;
+  }
+
+  async function doInstallMpv() {
+    installingMpv = true;
+    try {
+      await installMpv();
+      await redetect();
+      toast('mpv installed and ready', 'success');
+    } catch (e) {
+      toast(errorText(e), 'error', 9000);
+    } finally {
+      installingMpv = false;
+    }
+  }
+
+  onMount(async () => {
+    await redetect();
   });
 
   const found = $derived(detected.find((d) => d.player === settings.player));
@@ -121,8 +143,21 @@
                 {#if found && !settings.playerPath}<span class="ok-dot" title="Detected"></span>{/if}
                 <input class="input" bind:value={settings.playerPath} placeholder={found?.path ?? 'Auto-detect'} spellcheck="false" />
               </div>
-              {#if !found && settings.player !== 'custom' && !settings.playerPath}
-                <p class="hint">{settings.player} wasn't found. Install it with <code>winget install {settings.player === 'vlc' ? 'VideoLAN.VLC' : 'mpv'}</code> or set its path.</p>
+              {#if !detecting && !found && settings.player !== 'custom' && !settings.playerPath}
+                <div class="missing">
+                  <span>
+                    {settings.player === 'mpv' ? 'mpv' : 'VLC'} wasn't found on this PC.
+                    {#if detected.length}Ripple will use {detected[0].player === 'mpv' ? 'mpv' : 'VLC'} instead until you install it.{/if}
+                  </span>
+                  {#if settings.player === 'mpv'}
+                    <button class="btn primary sm" disabled={installingMpv} onclick={doInstallMpv}>
+                      {#if installingMpv}<span class="spinner small-spin"></span>Installing…{:else}Install mpv{/if}
+                    </button>
+                  {:else}
+                    <button class="btn sm" onclick={() => openExternal('https://www.videolan.org/vlc/')}>Get VLC</button>
+                  {/if}
+                  <button class="btn sm ghost" disabled={detecting} onclick={redetect}>Check again</button>
+                </div>
               {/if}
             </SettingRow>
             <SettingRow title="Extra player arguments" description="Passed to the player every time, e.g. --fullscreen --volume=80" wide>
@@ -307,8 +342,12 @@
   .status-input .input { padding-left: 30px; }
   .status-input:not(:has(.ok-dot)) .input { padding-left: 12px; }
   .ok-dot { position: absolute; left: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-  .hint { margin: 0; font-size: 12.5px; color: var(--text-2); }
-  code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .missing {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;
+    background: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+  .missing span { flex: 1; min-width: 200px; color: var(--text); }
+  .small-spin { width: 13px; height: 13px; border-width: 2px; }
 
   .hero-card {
     display: flex; align-items: center; gap: 16px; width: 100%; padding: 18px; margin-bottom: 14px; text-align: left; cursor: pointer;
