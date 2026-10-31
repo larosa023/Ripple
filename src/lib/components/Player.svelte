@@ -5,6 +5,7 @@
   import WindowControls from './WindowControls.svelte';
   import { errorText, playExternal } from '../player';
   import { isTauri } from '../stremio/http';
+  import { backdropOf } from '../stremio/images';
   import { settings } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
   import {
@@ -40,7 +41,7 @@
   const audios = $derived(playback.tracks.filter((t) => t.type === 'audio'));
   const progress = $derived(playback.duration ? (playback.time / playback.duration) * 100 : 0);
   const buffered = $derived(playback.duration ? Math.min(100, ((playback.time + playback.cacheTime) / playback.duration) * 100) : 0);
-  const loading = $derived(!playback.error && (!playback.loaded || playback.buffering) && !playback.ended);
+  const loading = $derived(!playback.error && (!playback.ready || playback.buffering) && !playback.ended);
   const customChrome = $derived(isTauri && !settings.nativeTitleBar && !playback.fullscreen);
   const volIcon = $derived(playback.muted || playback.volume === 0 ? 'mute' : playback.volume < 50 ? 'volumeLow' : 'volume');
 
@@ -181,6 +182,13 @@
     aria-label="Video player"
     onpointermove={poke}
   >
+    <!-- Solid cover until mpv draws its first frame, so the transparent window never shows the desktop. -->
+    <div class="cover" class:gone={playback.ready && !playback.error} aria-hidden="true">
+      {#if playback.meta && backdropOf(playback.meta, 'medium')}
+        <div class="art" style:background-image={`url("${backdropOf(playback.meta, 'medium')}")`}></div>
+      {/if}
+    </div>
+
     <!-- Clicks on the video toggle pause; double-click toggles fullscreen. -->
     <div class="surface" role="presentation" onclick={onSurfaceClick} ondblclick={onSurfaceDbl}></div>
 
@@ -330,6 +338,9 @@
   .player { position: fixed; inset: 0; z-index: 90; color: #fff; font-family: var(--font); user-select: none; }
   .player.hide { cursor: none; }
   .surface { position: absolute; inset: 0; }
+  .cover { position: absolute; inset: 0; background: #000; transition: opacity 350ms ease, visibility 0s linear 0s; }
+  .cover.gone { opacity: 0; visibility: hidden; transition: opacity 350ms ease, visibility 0s linear 350ms; }
+  .art { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.28; transform: scale(1.05); }
 
   .top, .bottom { position: absolute; left: 0; right: 0; transition: opacity 220ms ease, transform 220ms ease; }
   .hide .top, .hide .bottom { opacity: 0; pointer-events: none; }

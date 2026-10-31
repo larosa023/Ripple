@@ -38,6 +38,8 @@ interface PlaybackState {
   sid: number | false;
   aid: number | false;
   loaded: boolean;
+  /** mpv has drawn a video frame (or audio is clearly playing), so the picture can show through. */
+  ready: boolean;
   ended: boolean;
   error: string;
   fullscreen: boolean;
@@ -63,6 +65,7 @@ const blank = (): PlaybackState => ({
   sid: false,
   aid: false,
   loaded: false,
+  ready: false,
   ended: false,
   error: '',
   fullscreen: false,
@@ -71,12 +74,22 @@ const blank = (): PlaybackState => ({
 export const playback: PlaybackState = $state(blank());
 
 let unlisteners: (() => void)[] = [];
+let firstTime: number | null = null;
 let saveTimer: ReturnType<typeof setInterval> | undefined;
 
 function onProp(name: string, data: unknown) {
   switch (name) {
     case 'time-pos':
-      if (typeof data === 'number') playback.time = data;
+      if (typeof data === 'number') {
+        // Audio-only streams never report a video size; treat steady playback as ready.
+        if (playback.loaded && firstTime !== null && Math.abs(data - firstTime) > 0.8) playback.ready = true;
+        if (firstTime === null) firstTime = data;
+        playback.time = data;
+      }
+      break;
+    case 'video-params/w':
+      // A video size means mpv is rendering frames; let a few paint before revealing.
+      if (typeof data === 'number' && data > 0) setTimeout(() => (playback.ready = playback.active), 120);
       break;
     case 'duration':
       if (typeof data === 'number') playback.duration = data;
@@ -147,6 +160,7 @@ function persistProgress() {
 /** Starts a stream inside Ripple. Throws NEED_MPV:... if mpv isn't installed. */
 export async function openPlayer(p: Prepared, info: { title: string; subtitle: string; meta: MetaPreview; videoId: string }) {
   if (playback.active) await closePlayer(false);
+  firstTime = null;
   Object.assign(playback, blank(), {
     active: true,
     title: info.title,

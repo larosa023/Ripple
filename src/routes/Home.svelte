@@ -5,7 +5,9 @@
   import PosterCard from '../lib/components/PosterCard.svelte';
   import { boardCatalogs, syncRows } from '../lib/home';
   import { addons } from '../lib/stores/addons.svelte';
-  import { library } from '../lib/stores/library.svelte';
+  import { library, removeFromContinue } from '../lib/stores/library.svelte';
+  import { toast } from '../lib/stores/toast.svelte';
+  import Icon from '../lib/components/Icon.svelte';
   import { href } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
   import { look } from '../lib/theme/look.svelte';
@@ -43,7 +45,18 @@
       <h2>Continue watching</h2>
       <div class="scroller" use:dragScroll>
         {#each library.history.slice(0, 20) as h (h.meta.id)}
-          <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} progress={library.progress?.[h.videoId] ? library.progress[h.videoId].t / library.progress[h.videoId].d : 0} />
+          <div class="cw-item">
+            <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} progress={library.progress?.[h.videoId] ? library.progress[h.videoId].t / library.progress[h.videoId].d : 0} />
+            <button
+              class="cw-remove"
+              title="Remove from Continue watching"
+              aria-label={`Remove ${h.meta.name} from Continue watching`}
+              onclick={() => {
+                const undo = removeFromContinue(h.meta.id);
+                toast(`Removed ${h.meta.name}`, 'info', 6000, { label: 'Undo', run: undo });
+              }}
+            ><Icon name="x" size={14} stroke={2.4} /></button>
+          </div>
         {/each}
       </div>
     </section>
@@ -62,4 +75,12 @@
 <style>
   .cw { margin-bottom: var(--row-gap); }
   h2 { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
+  .cw-item { position: relative; flex-shrink: 0; }
+  .cw-remove {
+    position: absolute; top: 8px; left: 8px; z-index: 2; width: 26px; height: 26px; padding: 0; display: grid; place-items: center;
+    border: 0; border-radius: 50%; background: rgb(0 0 0 / 0.72); color: #fff; cursor: pointer;
+    opacity: 0; transform: scale(0.85); transition: opacity var(--dur), transform var(--dur), background var(--dur);
+  }
+  .cw-item:hover .cw-remove, .cw-remove:focus-visible { opacity: 1; transform: none; }
+  .cw-remove:hover { background: var(--danger); }
 </style>

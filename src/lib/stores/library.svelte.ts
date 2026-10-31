@@ -73,6 +73,28 @@ export function removeFromHistory(id: string) {
   library.history = library.history.filter((h) => h.meta.id !== id);
 }
 
+/**
+ * Removes a title from Continue Watching (history + saved positions).
+ * Returns a function that undoes it.
+ */
+export function removeFromContinue(id: string): () => void {
+  const idx = library.history.findIndex((h) => h.meta.id === id);
+  if (idx < 0) return () => {};
+  const item = $state.snapshot(library.history[idx]) as HistoryItem;
+  const progress = Object.fromEntries(
+    Object.entries($state.snapshot(library.progress ?? {})).filter(([k]) => k === id || k.startsWith(id + ':')),
+  );
+  library.history = library.history.filter((h) => h.meta.id !== id);
+  for (const k of Object.keys(progress)) delete library.progress[k];
+  return () => {
+    if (library.history.some((h) => h.meta.id === id)) return;
+    const next = [...library.history];
+    next.splice(Math.min(idx, next.length), 0, item);
+    library.history = next;
+    Object.assign(library.progress, progress);
+  };
+}
+
 export function saveProgress(videoId: string, t: number, d: number) {
   if (!(d > 0) || !(t >= 0)) return;
   library.progress ??= {};
