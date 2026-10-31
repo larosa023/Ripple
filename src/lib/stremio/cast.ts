@@ -17,7 +17,7 @@ const TMDB_IMG = 'https://image.tmdb.org/t/p/w185';
 const cache = new Map<string, Promise<Person[]>>();
 
 /** v3 keys go in the query string; v4 read-access tokens (long JWTs) go in a header. */
-function tmdb<T>(path: string, key: string): Promise<T> {
+export function tmdb<T>(path: string, key: string): Promise<T> {
   const v4 = key.length > 40;
   const url = `${TMDB}${path}${v4 ? '' : `${path.includes('?') ? '&' : '?'}api_key=${encodeURIComponent(key)}`}`;
   return getJson<T>(url, 10000, v4 ? { headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' } } : {});

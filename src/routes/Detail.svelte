@@ -15,6 +15,8 @@
   import { look } from '../lib/theme/look.svelte';
   import { getCast, type Person } from '../lib/stremio/cast';
   import { settings } from '../lib/stores/settings.svelte';
+  import { filmUrl } from '../lib/letterboxd';
+  import { ratingColor, seriesGraphUrl, showRatings, type ShowRatings } from '../lib/ratings';
 
   const type = $derived(router.route.params[0] ?? 'movie');
   const id = $derived(router.route.params[1] ?? '');
@@ -143,6 +145,29 @@
       live = false;
     };
   });
+  // Episode ratings heatmap (TMDB), like Series Graph.
+  let ratings = $state<ShowRatings | null>(null);
+  let epView: 'list' | 'ratings' = $state('list');
+  $effect(() => {
+    const m = meta;
+    void settings.tmdbKey;
+    ratings = null;
+    if (!m || m.type === 'movie' || !(m.videos?.length)) return;
+    let live = true;
+    showRatings(m).then((r) => {
+      if (live) ratings = r;
+    });
+    return () => {
+      live = false;
+    };
+  });
+  const maxEps = $derived(ratings ? Math.max(...ratings.seasons.map((s) => s.episodes.length)) : 0);
+  function openRated(seasonNum: number, ep: number) {
+    const v = videos.find((x) => x.season === seasonNum && (x.episode ?? x.number) === ep);
+    if (v) openSources({ videoId: v.id, label: epLabel(v), episode: v });
+  }
+  const letterboxd = $derived(meta && !hasEpisodes ? filmUrl(meta) : null);
+
   const directors = $derived(meta?.app_extras?.directors?.map((d) => d.name) ?? meta?.director ?? []);
   const writers = $derived(meta?.app_extras?.writers?.map((d) => d.name) ?? meta?.writer ?? []);
   const imdb = $derived(meta?.id.startsWith('tt') ? `https://www.imdb.com/title/${meta.id}/` : '');
@@ -242,6 +267,8 @@
                     </button>
                   {/if}
                   {#if imdb}<button role="menuitem" onclick={() => openExternal(imdb)}><Icon name="external" size={16} />Open on IMDb</button>{/if}
+                  {#if letterboxd}<button role="menuitem" onclick={() => openExternal(letterboxd!)}><Icon name="external" size={16} />Open on Letterboxd</button>{/if}
+                  {#if ratings}<button role="menuitem" onclick={() => openExternal(seriesGraphUrl(ratings!, meta!.name))}><Icon name="chart" size={16} />Open in Series Graph</button>{/if}
                 </div>
               {/if}
             </div>
@@ -254,12 +281,52 @@
         <section class="block">
           <div class="block-head">
             <h2>Episodes</h2>
-            {#if seasons.length > 1}
+            {#if ratings}
+              <div class="viewtabs" role="tablist">
+                <button role="tab" class:on={epView === 'list'} aria-selected={epView === 'list'} onclick={() => (epView = 'list')}><Icon name="list" size={15} />List</button>
+                <button role="tab" class:on={epView === 'ratings'} aria-selected={epView === 'ratings'} onclick={() => (epView = 'ratings')}><Icon name="chart" size={15} />Ratings</button>
+              </div>
+            {/if}
+            {#if seasons.length > 1 && (epView === 'list' || !ratings)}
               <select class="select season" value={season} onchange={(e) => (season = +e.currentTarget.value)} aria-label="Season">
                 {#each seasons as s (s)}<option value={s}>{s === 0 ? 'Specials' : `Season ${s}`}</option>{/each}
               </select>
             {/if}
           </div>
+          {#if epView === 'ratings' && ratings}
+            <div class="heat-wrap" use:dragScroll>
+              <table class="heat">
+                <thead><tr><th></th>{#each ratings.seasons as s (s.season)}<th>S{s.season}</th>{/each}</tr></thead>
+                <tbody>
+                  {#each Array(maxEps) as _, i (i)}
+                    <tr>
+                      <th>E{i + 1}</th>
+                      {#each ratings.seasons as s (s.season)}
+                        {@const e = s.episodes.find((x) => x.episode === i + 1)}
+                        <td>
+                          {#if e}
+                            <button
+                              class="cell"
+                              style:background={ratingColor(e.rating)}
+                              title={`S${s.season}E${e.episode} · ${e.name}${e.votes ? ` · ${e.rating.toFixed(1)} (${e.votes} votes)` : ' · not rated yet'}`}
+                              onclick={() => openRated(s.season, e.episode)}
+                            >{e.rating ? e.rating.toFixed(1) : '–'}</button>
+                          {/if}
+                        </td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <div class="legend">
+              {#each [['Awesome', 9], ['Great', 8.5], ['Good', 8], ['Regular', 7], ['Bad', 6], ['Garbage', 5]] as [l, r] (l)}
+                <span><i style:background={ratingColor(r as number)}></i>{l}</span>
+              {/each}
+              <button class="link" onclick={() => openExternal(seriesGraphUrl(ratings!, meta!.name))}>Open in Series Graph</button>
+              <span class="src">Ratings from TMDB</span>
+            </div>
+          {:else}
           <div class="episodes" class:grid={look.episodeLayout === 'grid'}>
             {#each episodes as v (v.id)}
               {@const rp = library.progress?.[v.id]}
@@ -291,6 +358,7 @@
               </div>
             {/each}
           </div>
+          {/if}
         </section>
       {/if}
 
@@ -298,7 +366,7 @@
         <section class="block">
           <h2>Cast</h2>
           {#if !hasEpisodes && !settings.tmdbKey && !cast.some((c) => c.photo)}
-            <p class="hint">Add a free TMDB key in <a href="#/settings?tab=general">Settings → General</a> to see the full cast with photos.</p>
+            <p class="hint">Add a free TMDB key in <a href="#/settings?tab=integrations">Settings → Integrations</a> to see the full cast with photos.</p>
           {/if}
           <div class="cast" use:dragScroll>
             {#each cast as c, i (i)}
@@ -428,6 +496,28 @@
   .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .hint { margin: -6px 0 12px; font-size: 12.5px; color: var(--text-3); }
   .hint a { color: var(--accent); }
+  /* Episodes: list / ratings switch and heatmap */
+  .viewtabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .viewtabs button {
+    display: flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--text-2); padding: 5px 11px; border-radius: 8px;
+    font: 600 12.5px var(--font); cursor: pointer;
+  }
+  .viewtabs button.on { background: var(--accent); color: var(--on-accent); }
+  .heat-wrap { overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+  .heat { border-collapse: separate; border-spacing: 4px; }
+  .heat th { font-size: 11.5px; font-weight: 700; color: var(--text-2); padding: 0 4px; text-align: center; }
+  .heat tbody th { text-align: right; }
+  .heat td { padding: 0; }
+  .cell {
+    width: 46px; height: 30px; border: 0; border-radius: 6px; color: #fff; font: 700 12.5px var(--font); cursor: pointer;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.35); transition: transform 120ms, box-shadow 120ms;
+  }
+  .cell:hover { transform: scale(1.08); box-shadow: 0 0 0 2px var(--text); }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; }
+  .legend .link { border: 0; background: none; padding: 0; color: var(--accent); font: 600 12px var(--font); cursor: pointer; }
+  .legend .src { margin-left: auto; color: var(--text-3); font-size: 11.5px; }
   .credit { margin: 4px 0 0; font-size: 11.5px; color: var(--text-3); }
   .credit .link { padding: 0; border: 0; background: none; font: inherit; color: var(--text-2); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   .credit .link:hover { color: var(--accent); }

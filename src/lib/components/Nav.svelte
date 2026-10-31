@@ -4,6 +4,7 @@
     discover: { label: 'Discover', icon: 'compass' },
     search: { label: 'Search', icon: 'search' },
     library: { label: 'Library', icon: 'library' },
+    calendar: { label: 'Calendar', icon: 'calendar' },
     addons: { label: 'Addons', icon: 'puzzle' },
   };
 </script>

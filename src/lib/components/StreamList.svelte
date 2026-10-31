@@ -3,11 +3,10 @@
   import { describe, filterAndSort, playableUrl, quality, tags, type StreamSort } from '../stremio/streams';
   import { dragScroll } from '../actions/dragScroll';
   import type { MetaDetail, SourcedStream } from '../stremio/types';
-  import { errorText, installMpv, isNeedMpvError, isNoPlayerError, playExternal, prepare } from '../player';
-  import { openPlayer } from '../stores/playback.svelte';
-  import { isTauri } from '../stremio/http';
+  import { errorText, installMpv, isNeedMpvError, isNoPlayerError } from '../player';
+  import { playStream } from '../watch';
   import { enabledAddons } from '../stores/addons.svelte';
-  import { recordPlay } from '../stores/library.svelte';
+  import { shows } from '../stores/shows.svelte';
   import { settings } from '../stores/settings.svelte';
   import { dismiss, toast } from '../stores/toast.svelte';
   import Icon from './Icon.svelte';
@@ -47,6 +46,13 @@
       .map((name) => ({ name, items: shown.filter((x) => x.addonName === name) }))
       .sort((a, b) => addonOrder.indexOf(a.items[0].addonId) - addonOrder.indexOf(b.items[0].addonId)),
   );
+  // The source you used last time for this show, matched by release group (bingeGroup) or addon + quality.
+  const pref = $derived(meta.type !== 'movie' && settings.rememberPerShow ? shows[meta.id] : undefined);
+  function isLastUsed(s: SourcedStream): boolean {
+    if (!pref) return false;
+    if (pref.bingeGroup) return s.behaviorHints?.bingeGroup === pref.bingeGroup;
+    return !!pref.addonId && s.addonId === pref.addonId && quality(s) === pref.quality && (!pref.service || describe(s).service === pref.service);
+  }
   let reload = $state(0);
   function refresh() {
     clearCache();
@@ -69,7 +75,7 @@
     }).then(() => {
       if (live && settings.autoPlayBest && !autoPlayed && visible.length) {
         autoPlayed = true;
-        start(visible[0]);
+        start(visible.find(isLastUsed) ?? visible[0]);
       }
     });
     return () => {
@@ -81,15 +87,7 @@
 
   async function start(s: SourcedStream) {
     try {
-      const prepared = await prepare(s, { title: meta.name, type: meta.type, videoId, addons: enabledAddons() });
-      if (!prepared) return; // opened in the browser
-      if (settings.playIn === 'ripple' && isTauri) {
-        await openPlayer(prepared, { title: meta.name, subtitle: label, meta, videoId });
-      } else {
-        await playExternal(prepared, label ? `${meta.name} — ${label}` : meta.name);
-        recordPlay(meta, videoId, label);
-        toast('Opening player…', 'success', 2000);
-      }
+      await playStream(s, { meta, videoId, label });
     } catch (e) {
       if (isNeedMpvError(e) || isNoPlayerError(e)) {
         toast(errorText(e), 'error', 12000, { label: 'Install mpv', run: () => installThenPlay(s) });
@@ -167,6 +165,7 @@
           <div class="body">
             <div class="line1">
               <span class="src">{d.source}</span>
+              {#if isLastUsed(s)}<span class="last" title="You used this source last time for this show">Last used</span>{/if}
               {#if d.service}<span class="svc" class:cached={d.cached} title={d.cached ? 'Cached on your debrid service — starts instantly' : 'Debrid'}>{#if d.cached}⚡{/if}{d.service}</span>{/if}
             </div>
             {#if d.file && d.file !== d.source}<div class="file">{d.file}</div>{/if}
@@ -261,6 +260,10 @@
   .svc {
     flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 5px;
     color: var(--text-2); border: 1px solid var(--line);
+  }
+  .last {
+    flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px;
+    background: var(--accent); color: var(--on-accent); text-transform: uppercase;
   }
   .svc.cached { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
   .file { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

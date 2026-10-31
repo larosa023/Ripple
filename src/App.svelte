@@ -15,6 +15,8 @@
   import { go, router } from './lib/stores/router.svelte';
   import { settings } from './lib/stores/settings.svelte';
   import { applyLook, look } from './lib/theme/look.svelte';
+  import { startDiscordSync } from './lib/discord.svelte';
+  import Calendar from './routes/Calendar.svelte';
   import Addons from './routes/Addons.svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -23,7 +25,7 @@
   import Search from './routes/Search.svelte';
   import Settings from './routes/Settings.svelte';
 
-  const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, addons: Addons, settings: Settings };
+  const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, calendar: Calendar, addons: Addons, settings: Settings };
   const Page = $derived(pages[router.route.name]);
 
   // Apply the whole look (colors, fonts, layout attributes, custom CSS) whenever any part changes.
@@ -46,6 +48,8 @@
     document.documentElement.style.setProperty('--chrome-h', h);
   });
 
+  startDiscordSync();
+
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);
     // Refresh manifests in the background so new catalogs appear without blocking startup.
@@ -57,7 +61,7 @@
   });
 
   function onKey(e: KeyboardEvent) {
-    if (playback.active) return; // the player handles its own keys
+    if (playback.active && !playback.mini) return; // the player handles its own keys
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName);
     if ((e.ctrlKey && e.key.toLowerCase() === 'k') || (!typing && e.key === '/')) {
       e.preventDefault();

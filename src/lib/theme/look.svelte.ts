@@ -15,7 +15,7 @@ export type DetailLayout = 'cinematic' | 'classic';
 export type BgAnimation = 'none' | 'aurora' | 'bokeh';
 
 export interface NavItem {
-  id: 'home' | 'discover' | 'search' | 'library' | 'addons';
+  id: 'home' | 'discover' | 'search' | 'library' | 'calendar' | 'addons';
   visible: boolean;
 }
 
@@ -64,6 +64,7 @@ const NAV_DEFAULT: NavItem[] = [
   { id: 'discover', visible: true },
   { id: 'search', visible: true },
   { id: 'library', visible: true },
+  { id: 'calendar', visible: true },
   { id: 'addons', visible: true },
 ];
 
@@ -124,7 +125,13 @@ export function normalizeLook(input: Partial<Look>): Look {
   // Keep nav items valid even if a theme file lists unknown or missing ones.
   const known = new Map(NAV_DEFAULT.map((n) => [n.id, n]));
   const items = (input.navItems ?? []).filter((n) => known.has(n.id));
-  for (const n of NAV_DEFAULT) if (!items.some((i) => i.id === n.id)) items.push({ ...n });
+  // New nav items (from an update) slot in after the item they follow by default.
+  NAV_DEFAULT.forEach((n, idx) => {
+    if (items.some((i) => i.id === n.id)) return;
+    const prev = NAV_DEFAULT[idx - 1];
+    const at = prev ? items.findIndex((i) => i.id === prev.id) + 1 : 0;
+    items.splice(at > 0 ? at : items.length, 0, { ...n });
+  });
   merged.navItems = items;
   return merged;
 }

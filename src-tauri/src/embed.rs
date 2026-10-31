@@ -39,6 +39,7 @@ const OBSERVED: &[&str] = &[
     "aid",
     "idle-active",
     "video-params/w",
+    "chapter-list",
 ];
 
 fn pipe_name() -> String {
@@ -264,7 +265,18 @@ fn listen(mut conn: Conn, session: u64, emit: impl Fn(&str, Value)) {
 /// Sends one command on its own connection and returns mpv's reply.
 fn send(command: Value) -> Result<Value, String> {
     let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
-    let mut conn = connect().map_err(|_| "Player isn't running.".to_string())?;
+    // A pipe instance can be momentarily busy when several commands arrive at once; retry briefly.
+    let mut tries = 0;
+    let mut conn = loop {
+        match connect() {
+            Ok(c) => break c,
+            Err(_) if tries < 25 => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(8));
+            }
+            Err(_) => return Err("Player isn't running.".to_string()),
+        }
+    };
     let line = json!({ "command": command, "request_id": id }).to_string() + "\n";
     conn.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
     conn.flush().map_err(|e| e.to_string())?;

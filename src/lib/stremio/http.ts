@@ -40,6 +40,22 @@ export async function getJson<T>(url: string, timeoutMs = 12000, init: RequestIn
   }
 }
 
+export async function getText(url: string, timeoutMs = 12000): Promise<string> {
+  const f = await getFetch();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await f(url, { signal: ctrl.signal });
+    if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw new Error('Timed out');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function postJson<T>(url: string, body: unknown, timeoutMs = 12000): Promise<T> {
   return getJson<T>(url, timeoutMs, {
     method: 'POST',

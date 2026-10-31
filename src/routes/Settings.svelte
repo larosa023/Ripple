@@ -13,12 +13,59 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { openStudio } from '../lib/stores/ui.svelte';
   import { checkForUpdate, installUpdate, updater } from '../lib/stores/updater.svelte';
+  import { exportCsv, importDiary, profileUrl } from '../lib/letterboxd';
+  import { sendDiscord } from '../lib/discord.svelte';
+  import { shows } from '../lib/stores/shows.svelte';
 
-  type Section = 'general' | 'playback' | 'streams' | 'appearance' | 'data' | 'about';
+  const SUB_FONTS = ['', 'Segoe UI', 'Arial', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Calibri', 'Georgia', 'Consolas'];
+  const SUB_COLORS = ['#ffffff', '#fff3a8', '#ffe14d', '#a8f0ff', '#b6ffb0'];
+
+  let lbBusy = $state(false);
+  async function lbImport() {
+    lbBusy = true;
+    try {
+      const r = await importDiary(settings.letterboxdUser);
+      toast(r.found ? `Imported ${r.found} diary entries · ${r.added} newly marked watched` : 'Nothing in that diary yet', 'success', 5000);
+    } catch (e) {
+      toast((e as Error).message, 'error', 7000);
+    } finally {
+      lbBusy = false;
+    }
+  }
+  function lbExport() {
+    const { csv, count } = exportCsv();
+    if (!count) {
+      toast('No watched movies to export yet', 'info');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `ripple-letterboxd-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`Exported ${count} movies. Import the file at letterboxd.com/import`, 'success', 6000);
+  }
+  let discordState = $state<'' | 'checking' | 'ok' | string>('');
+  async function testDiscord() {
+    discordState = 'checking';
+    const err = await sendDiscord(true);
+    discordState = err ?? 'ok';
+  }
+  const showCount = $derived(Object.keys(shows).length);
+  const subShadow = $derived(
+    settings.subStyle === 'outline'
+      ? '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000'
+      : settings.subStyle === 'shadow'
+        ? '2px 3px 4px rgb(0 0 0 / 0.85)'
+        : 'none',
+  );
+
+  type Section = 'general' | 'playback' | 'streams' | 'integrations' | 'appearance' | 'data' | 'about';
   const SECTIONS: { id: Section; label: string; icon: string; blurb: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', blurb: 'Startup and content filtering' },
     { id: 'playback', label: 'Playback', icon: 'play', blurb: 'Player, subtitles and the streaming server' },
     { id: 'streams', label: 'Streams', icon: 'filter', blurb: 'How stream lists are sorted and filtered' },
+    { id: 'integrations', label: 'Integrations', icon: 'link', blurb: 'TMDB, Letterboxd, Series Graph and Discord' },
     { id: 'appearance', label: 'Appearance', icon: 'brush', blurb: 'Themes, layouts and the home screen' },
     { id: 'data', label: 'Data & network', icon: 'download', blurb: 'Backups, cache and addon timeouts' },
     { id: 'about', label: 'About & updates', icon: 'refresh', blurb: 'Version and updates' },
@@ -145,34 +192,6 @@
             </SettingRow>
           </div>
 
-          <div class="group">
-            <SettingRow
-              title="TMDB key (for cast photos)"
-              description="TV shows get full cast with photos automatically. For movies, paste a free TMDB API key or read-access token. Takes about 2 minutes: create an account, then Settings → API."
-              wide
-            >
-              <div class="tmdb">
-                <input
-                  class="input mono"
-                  type="password"
-                  placeholder="Paste API key or read-access token"
-                  bind:value={tmdbDraft}
-                  onkeydown={(e) => e.key === 'Enter' && saveTmdb()}
-                  spellcheck="false"
-                  autocomplete="off"
-                />
-                <button class="btn sm primary" disabled={tmdbState === 'checking' || tmdbDraft.trim() === settings.tmdbKey} onclick={saveTmdb}>
-                  {tmdbState === 'checking' ? 'Checking…' : tmdbDraft.trim() ? 'Save' : 'Remove'}
-                </button>
-                <button class="btn sm ghost" onclick={() => openExternal('https://www.themoviedb.org/settings/api')}>
-                  <Icon name="external" size={14} />Get a free key
-                </button>
-              </div>
-              {#if tmdbState === 'ok' && settings.tmdbKey}<span class="ready"><span class="ok-dot static"></span>Connected</span>{/if}
-              {#if tmdbState === 'bad'}<span class="bad">TMDB didn't accept that key. Copy the "API Key" or "API Read Access Token" exactly.</span>{/if}
-            </SettingRow>
-          </div>
-
         {:else if section === 'playback'}
           {@const mpvFound = detected.find((d) => d.player === 'mpv')}
           <div class="group">
@@ -246,6 +265,81 @@
           {/if}
 
           <div class="group">
+            <SettingRow title="Next episode" description="Near the end of an episode, show the next one with a countdown. It uses the same source as the episode you're watching when it can.">
+              <Switch bind:checked={settings.autoplayNext} label="Next episode" />
+            </SettingRow>
+            {#if settings.autoplayNext}
+              <SettingRow title="Countdown" description="How long before the next episode starts by itself.">
+                <div class="seg">
+                  {#each [[0, 'Off'], [5, '5s'], [10, '10s'], [15, '15s'], [30, '30s']] as [v, l] (v)}
+                    <button class:on={settings.nextCountdown === v} onclick={() => (settings.nextCountdown = v as number)}>{l}</button>
+                  {/each}
+                </div>
+              </SettingRow>
+            {/if}
+            <SettingRow title="Skip intro and recap" description="Uses chapter marks in the file, and AniSkip for anime. Auto never skips credits.">
+              <div class="seg">
+                <button class:on={settings.skipIntro === 'button'} onclick={() => (settings.skipIntro = 'button')}>Show button</button>
+                <button class:on={settings.skipIntro === 'auto'} onclick={() => (settings.skipIntro = 'auto')}>Auto skip</button>
+                <button class:on={settings.skipIntro === 'off'} onclick={() => (settings.skipIntro = 'off')}>Off</button>
+              </div>
+            </SettingRow>
+            <SettingRow title="Remember choices per show" description={`Audio language, subtitles and source you used last time${showCount ? ` · ${showCount} show${showCount === 1 ? '' : 's'} remembered` : ''}.`}>
+              {#if showCount}<button class="btn sm ghost" onclick={() => confirm('Forget remembered choices for every show?') && Object.keys(shows).forEach((k) => delete shows[k])}>Forget all</button>{/if}
+              <Switch bind:checked={settings.rememberPerShow} label="Remember choices per show" />
+            </SettingRow>
+            <SettingRow title="Mini player" description="Adds a button to the player that shrinks the video into a corner so you can keep browsing.">
+              <Switch bind:checked={settings.miniPlayer} label="Mini player" />
+            </SettingRow>
+          </div>
+
+          <div class="group">
+            <SettingRow title="Subtitle style" description="Applies to plain subtitles (SRT, VTT). Styled anime subtitles keep their own look unless you override them below." wide>
+              <div class="sub-preview" aria-hidden="true">
+                <span
+                  style:font-family={settings.subFont || 'Arial, sans-serif'}
+                  style:color={settings.subColor}
+                  style:font-weight={settings.subBold ? 700 : 500}
+                  style:font-size="{Math.round(22 * settings.subScale)}px"
+                  style:text-shadow={subShadow}
+                  style:background={settings.subStyle === 'box' ? 'rgb(0 0 0 / 0.7)' : 'transparent'}
+                  style:bottom="{Math.max(6, (100 - settings.subPos) * 1.4 + 12)}px"
+                >The quick brown fox jumps over the lazy dog</span>
+              </div>
+              <div class="sub-grid">
+                <label>Font
+                  <select class="select" bind:value={settings.subFont}>
+                    {#each SUB_FONTS as f (f)}<option value={f}>{f || 'Default'}</option>{/each}
+                  </select>
+                </label>
+                <label>Size
+                  <span class="range"><input type="range" min="0.5" max="2" step="0.05" bind:value={settings.subScale} /><b>{Math.round(settings.subScale * 100)}%</b></span>
+                </label>
+                <label>Style
+                  <div class="seg">
+                    <button class:on={settings.subStyle === 'outline'} onclick={() => (settings.subStyle = 'outline')}>Outline</button>
+                    <button class:on={settings.subStyle === 'shadow'} onclick={() => (settings.subStyle = 'shadow')}>Shadow</button>
+                    <button class:on={settings.subStyle === 'box'} onclick={() => (settings.subStyle = 'box')}>Box</button>
+                  </div>
+                </label>
+                <label>Color
+                  <span class="swatches">
+                    {#each SUB_COLORS as c (c)}<button class="sw" class:on={settings.subColor === c} style:background={c} onclick={() => (settings.subColor = c)} aria-label={c}></button>{/each}
+                    <input type="color" bind:value={settings.subColor} aria-label="Custom color" />
+                  </span>
+                </label>
+                <label>Position
+                  <span class="range"><input type="range" min="70" max="100" step="1" bind:value={settings.subPos} /><b>{settings.subPos === 100 ? 'Bottom' : `${100 - settings.subPos}% up`}</b></span>
+                </label>
+                <label class="checks">
+                  <span><input type="checkbox" bind:checked={settings.subBold} /> Bold</span>
+                  <span title="Also restyle subtitles that come with their own fonts and colors (common for anime). Signs and karaoke may look off."><input type="checkbox" bind:checked={settings.subOverride} /> Override styled subtitles</span>
+                </label>
+              </div>
+            </SettingRow>
+          </div>
+
+          <div class="group">
             <SettingRow title="Subtitle languages" description="Comma-separated 3-letter codes, in order of preference (eng, spa, fre…).">
               <input class="input short" bind:value={settings.subtitleLangs} placeholder="eng" spellcheck="false" />
             </SettingRow>
@@ -289,6 +383,86 @@
             <SettingRow title="Hide streams containing" description="Comma-separated words. Any match hides the stream." wide>
               <input class="input" bind:value={settings.excludeKeywords} placeholder="3D, HDTS, dubbed" />
             </SettingRow>
+          </div>
+
+        {:else if section === 'integrations'}
+          <div class="group">
+            <SettingRow
+              title="TMDB"
+              description="A free TMDB API key or read-access token adds full cast with photos for movies and the episode ratings graph for shows. Create an account, then Settings → API."
+              wide
+            >
+              <div class="tmdb">
+                <input
+                  class="input mono"
+                  type="password"
+                  placeholder="Paste API key or read-access token"
+                  bind:value={tmdbDraft}
+                  onkeydown={(e) => e.key === 'Enter' && saveTmdb()}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <button class="btn sm primary" disabled={tmdbState === 'checking' || tmdbDraft.trim() === settings.tmdbKey} onclick={saveTmdb}>
+                  {tmdbState === 'checking' ? 'Checking…' : tmdbDraft.trim() ? 'Save' : 'Remove'}
+                </button>
+                <button class="btn sm ghost" onclick={() => openExternal('https://www.themoviedb.org/settings/api')}>
+                  <Icon name="external" size={14} />Get a free key
+                </button>
+              </div>
+              {#if tmdbState === 'ok' && settings.tmdbKey}<span class="ready"><span class="ok-dot static"></span>Connected</span>{/if}
+              {#if tmdbState === 'bad'}<span class="bad">TMDB didn't accept that key. Copy the "API Key" or "API Read Access Token" exactly.</span>{/if}
+            </SettingRow>
+          </div>
+
+          <div class="group">
+            <SettingRow
+              title="Letterboxd"
+              description="Letterboxd has no public API, so Ripple can't sync both ways. It can mark films from your public diary as watched, export your Ripple watch history for Letterboxd's importer, and link every movie to its Letterboxd page."
+              wide
+            >
+              <div class="tmdb">
+                <input class="input" placeholder="Letterboxd username" bind:value={settings.letterboxdUser} spellcheck="false" autocomplete="off" />
+                <button class="btn sm primary" disabled={lbBusy || !settings.letterboxdUser.trim()} onclick={lbImport}>
+                  {#if lbBusy}<span class="spinner small-spin"></span>Importing…{:else}Import diary{/if}
+                </button>
+                {#if settings.letterboxdUser.trim()}
+                  <button class="btn sm ghost" onclick={() => openExternal(profileUrl(settings.letterboxdUser))}><Icon name="external" size={14} />Profile</button>
+                {/if}
+              </div>
+            </SettingRow>
+            <SettingRow title="Export to Letterboxd" description="A CSV of the movies you've watched in Ripple. Upload it at letterboxd.com/import.">
+              <button class="btn sm" onclick={lbExport}><Icon name="download" size={14} />Export CSV</button>
+            </SettingRow>
+          </div>
+
+          <div class="group">
+            <SettingRow
+              title="Series Graph"
+              description={settings.tmdbKey ? 'Shows get a Ratings view in their episode list, colored like Series Graph, plus a link to the show on seriesgraph.com.' : 'Add a TMDB key above to get the Series Graph-style episode ratings view on show pages.'}
+            >
+              <button class="btn sm ghost" onclick={() => openExternal('https://seriesgraph.com')}><Icon name="external" size={14} />seriesgraph.com</button>
+            </SettingRow>
+          </div>
+
+          <div class="group">
+            <SettingRow title="Discord status" description="Show what you're watching on your Discord profile while Discord is open.">
+              <Switch bind:checked={settings.discord} label="Discord status" />
+            </SettingRow>
+            {#if settings.discord}
+              <SettingRow
+                title="Discord application ID"
+                description="Discord shows the app's name as “Watching …”. Create an application named Ripple at discord.com/developers/applications and paste its Application ID."
+                wide
+              >
+                <div class="tmdb">
+                  <input class="input mono" placeholder="e.g. 1234567890123456789" bind:value={settings.discordAppId} spellcheck="false" inputmode="numeric" />
+                  <button class="btn sm primary" disabled={!settings.discordAppId.trim() || discordState === 'checking'} onclick={testDiscord}>Test</button>
+                  <button class="btn sm ghost" onclick={() => openExternal('https://discord.com/developers/applications')}><Icon name="external" size={14} />Developer portal</button>
+                </div>
+                {#if discordState === 'ok'}<span class="ready"><span class="ok-dot static"></span>Connected to Discord</span>{/if}
+                {#if discordState && discordState !== 'ok' && discordState !== 'checking'}<span class="bad">{discordState}</span>{/if}
+              </SettingRow>
+            {/if}
           </div>
 
         {:else if section === 'appearance'}
@@ -446,6 +620,24 @@
   .hc-text strong { font-size: 15px; }
   .kbd { font-size: 11px; font-weight: 700; color: var(--text-2); padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); white-space: nowrap; }
 
+  .sub-preview {
+    position: relative; height: 150px; border-radius: 10px; overflow: hidden;
+    background: linear-gradient(135deg, #24324a, #4a3a2a 55%, #1d2a22); box-shadow: inset 0 0 60px rgb(0 0 0 / 0.5);
+  }
+  .sub-preview span { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 2px 8px; border-radius: 4px; line-height: 1.25; }
+  .sub-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+  .sub-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .sub-grid .select { width: 100%; }
+  .range { display: flex; align-items: center; gap: 10px; }
+  .range input { flex: 1; accent-color: var(--accent); }
+  .range b { min-width: 64px; font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .swatches { display: flex; align-items: center; gap: 6px; }
+  .sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+  .sw.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .swatches input[type='color'] { width: 28px; height: 28px; border: 0; padding: 0; background: none; cursor: pointer; }
+  .checks { flex-direction: row !important; flex-wrap: wrap; gap: 8px 16px !important; align-items: center; align-self: end; }
+  .checks span { display: flex; align-items: center; gap: 6px; color: var(--text); cursor: pointer; }
+  @media (max-width: 720px) { .sub-grid { grid-template-columns: 1fr; } }
   .about { display: flex; align-items: center; gap: 16px; padding: 18px; margin-bottom: 14px; }
   .app { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
   .fine { font-size: 12.5px; }

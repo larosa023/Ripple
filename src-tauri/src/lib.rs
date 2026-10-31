@@ -1,3 +1,4 @@
+mod discord;
 mod embed;
 mod player;
 mod updater;
@@ -14,13 +15,15 @@ pub fn run() {
             embed::player_command,
             embed::player_stop,
             updater::check_update,
-            updater::install_update
+            updater::install_update,
+            discord::discord_set
         ])
         .build(tauri::generate_context!())
         .expect("error while building Ripple")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
                 embed::shutdown();
+                discord::shutdown();
             }
         });
 }

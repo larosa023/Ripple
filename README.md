@@ -27,11 +27,17 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
 - **Smart stream list.** Streams appear as each addon responds, with quality, size, and HDR/DV/REMUX/cached tags. Sort by quality, size, or addon order; filter by quality, hide CAM releases, hide keywords, or show direct links only. Per-addon filter pills.
 - **Built-in player.** Videos play inside Ripple (powered by mpv, so MKV, HEVC, HDR and surround audio all work) with Ripple's own controls: seek bar with buffer, audio and subtitle track menus, subtitle size, speed, fullscreen, keyboard shortcuts, and resume where you left off. Subtitles from subtitle addons in your languages are added automatically.
+- **Binge mode.** A "Next episode" card near the credits with a countdown, using the same release (bingeGroup), addon and quality you were watching. Skip intro / recap buttons from the file's chapters and AniSkip (anime), or auto-skip.
+- **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
+- **Subtitle styling**: font, size, color, outline / shadow / box, position, and a sync offset (`Z`/`X`) in the player.
+- **Mini player** (optional): shrink the video to a corner and keep browsing.
+- **Calendar** of new and upcoming episodes for the shows in your library.
+- **Integrations**: TMDB (cast photos, episode ratings), a Series Graph-style ratings heatmap on every show, Letterboxd (film links, diary import, CSV export), and an optional Discord "Watching" status.
 - **Or an external player** (mpv, VLC, or any player you choose) if you prefer.
 - **Library**: saved titles, watch history, watched episodes.
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
-- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `Esc` back.
+- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `Esc` back.
 
 ## Install
 

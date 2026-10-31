@@ -36,6 +36,26 @@ export interface Settings {
   streamingServer: string;
   autoPlayBest: boolean;
   subtitleLangs: string;
+  // Watching
+  /** Show a "Next episode" card near the end, and count down to play it. */
+  autoplayNext: boolean;
+  /** Seconds the next-episode card counts down; 0 waits for a click. */
+  nextCountdown: number;
+  skipIntro: 'button' | 'auto' | 'off';
+  /** Remember audio, subtitles and source per show. */
+  rememberPerShow: boolean;
+  /** Offer a corner mini player while you browse. */
+  miniPlayer: boolean;
+  // Subtitle look
+  subFont: string;
+  subScale: number;
+  subColor: string;
+  subStyle: 'outline' | 'shadow' | 'box';
+  /** Vertical position, 100 = bottom edge (mpv sub-pos). */
+  subPos: number;
+  subBold: boolean;
+  /** Apply the style to styled (ASS) subtitles too; can break anime signs. */
+  subOverride: boolean;
   // Streams
   streamSort: StreamSort;
   hideCam: boolean;
@@ -45,6 +65,11 @@ export interface Settings {
   // Integrations
   /** Optional TMDB API key (v3 key or v4 read token) for full cast with photos. */
   tmdbKey: string;
+  /** Letterboxd username, for importing your diary. */
+  letterboxdUser: string;
+  /** Show "Watching …" on your Discord profile. */
+  discord: boolean;
+  discordAppId: string;
   // Network & updates
   requestTimeoutSec: number;
   checkUpdates: boolean;
@@ -66,12 +91,27 @@ export const DEFAULT_SETTINGS: Settings = {
   streamingServer: 'http://127.0.0.1:11470',
   autoPlayBest: false,
   subtitleLangs: 'eng',
+  autoplayNext: true,
+  nextCountdown: 10,
+  skipIntro: 'button',
+  rememberPerShow: true,
+  miniPlayer: true,
+  subFont: '',
+  subScale: 1,
+  subColor: '#ffffff',
+  subStyle: 'outline',
+  subPos: 100,
+  subBold: false,
+  subOverride: false,
   streamSort: 'quality',
   hideCam: true,
   onlyDirect: false,
   qualities: [],
   excludeKeywords: '',
   tmdbKey: '',
+  letterboxdUser: '',
+  discord: false,
+  discordAppId: '',
   requestTimeoutSec: 12,
   checkUpdates: true,
 };

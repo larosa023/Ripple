@@ -155,3 +155,7 @@ input[type='checkbox']:checked::after { transform: rotate(-45deg) translate(1px,
    so only the player controls sit on top of the picture. */
 html.playing, html.playing body { background: transparent !important; }
 html.playing #app > :not(.player):not(.toasts) { visibility: hidden; }
+
+/* Mini player: show the app again, but cut a hole where the video plays. */
+html.playing.mini #app > :not(.player):not(.toasts) { visibility: visible; clip-path: var(--mini-clip); }
+html.playing.mini body::before { content: ''; position: fixed; inset: 0; background: var(--bg); clip-path: var(--mini-clip); }
