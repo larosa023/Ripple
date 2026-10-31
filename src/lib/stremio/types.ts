@@ -97,6 +97,9 @@ export interface MetaDetail extends MetaPreview {
   awards?: string;
   language?: string;
   certification?: string;
+  /** TMDB id (Cinemeta includes it for movies) */
+  moviedb_id?: number;
+  imdb_id?: string;
   /** Cinemeta extras: cast with photos, directors, writers */
   app_extras?: {
     cast?: { name: string; character?: string; photo?: string }[];

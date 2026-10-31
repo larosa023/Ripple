@@ -42,6 +42,9 @@ export interface Settings {
   onlyDirect: boolean;
   qualities: Quality[];
   excludeKeywords: string;
+  // Integrations
+  /** Optional TMDB API key (v3 key or v4 read token) for full cast with photos. */
+  tmdbKey: string;
   // Network & updates
   requestTimeoutSec: number;
   checkUpdates: boolean;
@@ -68,6 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onlyDirect: false,
   qualities: [],
   excludeKeywords: '',
+  tmdbKey: '',
   requestTimeoutSec: 12,
   checkUpdates: true,
 };

@@ -5,6 +5,7 @@
   import Switch from '../lib/components/Switch.svelte';
   import { detectPlayers, errorText, installMpv, openExternal, type DetectedPlayer } from '../lib/player';
   import { clearCache } from '../lib/stremio/client';
+  import { testTmdbKey } from '../lib/stremio/cast';
   import type { Quality } from '../lib/stremio/streams';
   import { exportAll, importAll } from '../lib/stores/persist';
   import { go, router } from '../lib/stores/router.svelte';
@@ -81,6 +82,25 @@
       toast((err as Error).message, 'error');
     }
   }
+  let tmdbDraft = $state(settings.tmdbKey);
+  let tmdbState = $state<'' | 'checking' | 'ok' | 'bad'>(settings.tmdbKey ? 'ok' : '');
+  async function saveTmdb() {
+    const key = tmdbDraft.trim();
+    if (!key) {
+      settings.tmdbKey = '';
+      tmdbState = '';
+      return;
+    }
+    tmdbState = 'checking';
+    if (await testTmdbKey(key)) {
+      settings.tmdbKey = key;
+      tmdbState = 'ok';
+      toast('TMDB connected — cast photos are on', 'success');
+    } else {
+      tmdbState = 'bad';
+    }
+  }
+
   async function manualCheck() {
     await checkForUpdate();
     if (updater.status === 'none') toast("You're on the latest version", 'success');
@@ -122,6 +142,34 @@
             </SettingRow>
             <SettingRow title="Hide 18+ catalogs" description="Skip catalogs from addons that mark themselves as adult on Home, Discover and Search.">
               <Switch bind:checked={settings.hideAdultAddons} label="Hide 18+ catalogs" />
+            </SettingRow>
+          </div>
+
+          <div class="group">
+            <SettingRow
+              title="TMDB key (for cast photos)"
+              description="TV shows get full cast with photos automatically. For movies, paste a free TMDB API key or read-access token. Takes about 2 minutes: create an account, then Settings → API."
+              wide
+            >
+              <div class="tmdb">
+                <input
+                  class="input mono"
+                  type="password"
+                  placeholder="Paste API key or read-access token"
+                  bind:value={tmdbDraft}
+                  onkeydown={(e) => e.key === 'Enter' && saveTmdb()}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <button class="btn sm primary" disabled={tmdbState === 'checking' || tmdbDraft.trim() === settings.tmdbKey} onclick={saveTmdb}>
+                  {tmdbState === 'checking' ? 'Checking…' : tmdbDraft.trim() ? 'Save' : 'Remove'}
+                </button>
+                <button class="btn sm ghost" onclick={() => openExternal('https://www.themoviedb.org/settings/api')}>
+                  <Icon name="external" size={14} />Get a free key
+                </button>
+              </div>
+              {#if tmdbState === 'ok' && settings.tmdbKey}<span class="ready"><span class="ok-dot static"></span>Connected</span>{/if}
+              {#if tmdbState === 'bad'}<span class="bad">TMDB didn't accept that key. Copy the "API Key" or "API Read Access Token" exactly.</span>{/if}
             </SettingRow>
           </div>
 
@@ -373,6 +421,9 @@
   .status-input { position: relative; display: flex; align-items: center; }
   .status-input .input { padding-left: 30px; }
   .status-input:not(:has(.ok-dot)) .input { padding-left: 12px; }
+  .tmdb { display: flex; gap: 8px; align-items: center; }
+  .tmdb .input { flex: 1; }
+  .bad { font-size: 12.5px; color: var(--danger); }
   .ready { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ok); }
   .ok-dot.static { position: static; }
   .ok-dot { position: absolute; left: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }

@@ -13,6 +13,8 @@
   import { untrack } from 'svelte';
   import { backdropOf, logoOf } from '../lib/stremio/images';
   import { look } from '../lib/theme/look.svelte';
+  import { getCast, type Person } from '../lib/stremio/cast';
+  import { settings } from '../lib/stores/settings.svelte';
 
   const type = $derived(router.route.params[0] ?? 'movie');
   const id = $derived(router.route.params[1] ?? '');
@@ -119,11 +121,28 @@
     return out.slice(0, 12);
   });
 
-  const cast = $derived(
-    meta?.app_extras?.cast?.length
-      ? meta.app_extras.cast.slice(0, 24)
-      : (meta?.cast ?? []).slice(0, 24).map((name) => ({ name, character: '', photo: '' })),
-  );
+  // Starts with the names the addon gave, then upgrades to the full cast with photos.
+  let cast = $state<Person[]>([]);
+  $effect(() => {
+    const m = meta;
+    void settings.tmdbKey;
+    if (!m) {
+      cast = [];
+      return;
+    }
+    cast = (m.app_extras?.cast ?? (m.cast ?? []).map((name) => ({ name, character: '', photo: '' }))).map((c) => ({
+      name: c.name,
+      character: c.character ?? '',
+      photo: c.photo ?? '',
+    }));
+    let live = true;
+    getCast(m).then((p) => {
+      if (live && p.length) cast = p.slice(0, 30);
+    });
+    return () => {
+      live = false;
+    };
+  });
   const directors = $derived(meta?.app_extras?.directors?.map((d) => d.name) ?? meta?.director ?? []);
   const writers = $derived(meta?.app_extras?.writers?.map((d) => d.name) ?? meta?.writer ?? []);
   const imdb = $derived(meta?.id.startsWith('tt') ? `https://www.imdb.com/title/${meta.id}/` : '');
@@ -278,6 +297,9 @@
       {#if look.showCast && cast.length}
         <section class="block">
           <h2>Cast</h2>
+          {#if !hasEpisodes && !settings.tmdbKey && !cast.some((c) => c.photo)}
+            <p class="hint">Add a free TMDB key in <a href="#/settings?tab=general">Settings → General</a> to see the full cast with photos.</p>
+          {/if}
           <div class="cast" use:dragScroll>
             {#each cast as c, i (i)}
               <div class="person">
@@ -401,6 +423,8 @@
   }
   .face span { font-weight: 800; font-size: 22px; color: var(--text-2); }
   .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hint { margin: -6px 0 12px; font-size: 12.5px; color: var(--text-3); }
+  .hint a { color: var(--accent); }
   .pname { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .role { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
