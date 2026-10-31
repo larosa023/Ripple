@@ -104,6 +104,7 @@ input[type='checkbox']:checked::after { transform: rotate(-45deg) translate(1px,
 
 .page { height: 100%; overflow-y: auto; padding: 28px var(--page-pad) 60px; }
 :root[data-nav='dock'] .page { padding-bottom: 110px; }
+:root[data-nav='dock'] { --dock-space: 92px; }
 .page-title { font-size: 26px; font-weight: 700; margin: 0 0 20px; letter-spacing: -0.02em; }
 .muted { color: var(--text-2); }
 .faint { color: var(--text-3); }

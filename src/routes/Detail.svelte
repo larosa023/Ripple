@@ -220,9 +220,16 @@
   :global(:root:not([data-light='1'])) .cinematic .facts { color: rgb(255 255 255 / 0.8); }
   .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
 
-  .side { position: sticky; top: 0; height: calc(100vh - 80px); padding: 16px; }
+  /* Stream panel: fits between the title bar and the floating dock, never under them. */
+  .side, .episodes-wrap .streams {
+    position: sticky; top: 0; padding: 16px 16px 12px;
+    /* ~84px = page padding + Back button above the panel, plus breathing room */
+    height: calc(100vh - var(--chrome-h, 0px) - var(--dock-space, 0px) - 84px);
+    border-radius: calc(var(--radius) * 1.4);
+    background: color-mix(in srgb, var(--bg-2) 94%, transparent);
+    box-shadow: 0 18px 50px rgb(0 0 0 / 0.35);
+  }
   .episodes-wrap.with-streams { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 24px; align-items: start; }
-  .episodes-wrap .streams { position: sticky; top: 0; height: calc(100vh - 80px); padding: 16px; }
   .seasons { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
   .pill {
     border: 1px solid var(--line); background: var(--bg-2); height: 30px; padding: 0 14px; border-radius: 15px;

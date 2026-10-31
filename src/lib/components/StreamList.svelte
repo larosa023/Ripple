@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getStreams } from '../stremio/client';
-  import { filterAndSort, formatSize, playableUrl, quality, sizeBytes, streamLabel, tags, type StreamSort } from '../stremio/streams';
+  import { describe, filterAndSort, playableUrl, quality, tags, type StreamSort } from '../stremio/streams';
+  import { dragScroll } from '../actions/dragScroll';
   import type { MetaDetail, SourcedStream } from '../stremio/types';
   import { errorText, installMpv, isNeedMpvError, isNoPlayerError, playExternal, prepare } from '../player';
   import { openPlayer } from '../stores/playback.svelte';
@@ -125,49 +126,64 @@
 
 <div class="panel">
   <header>
-    <div>
+    <div class="head-text">
       <div class="ttl">Streams</div>
-      {#if label}<div class="faint lbl">{label}</div>{/if}
+      <div class="sub">
+        {#if label}{label} · {/if}{visible.length} source{visible.length === 1 ? '' : 's'}{#if pending > 0}<span class="dots" aria-label="loading"></span>{/if}
+      </div>
     </div>
-    <div class="tools">
-      <select class="select sm" bind:value={settings.streamSort} aria-label="Sort streams">
-        {#each sorts as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
-      </select>
-      {#if onclose}
-        <button class="icon-btn" onclick={onclose} aria-label="Close streams"><Icon name="x" /></button>
-      {/if}
-    </div>
+    <select class="select sm" bind:value={settings.streamSort} aria-label="Sort streams">
+      {#each sorts as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
+    </select>
+    {#if onclose}
+      <button class="icon-btn" onclick={onclose} aria-label="Close streams"><Icon name="x" /></button>
+    {/if}
   </header>
 
   {#if addonNames.length > 1}
-    <div class="addons">
-      <button class="pill" class:on={!addonFilter} onclick={() => (addonFilter = '')}>All</button>
+    <div class="addons" use:dragScroll>
+      <button class="pill" class:on={!addonFilter} onclick={() => (addonFilter = '')}>All <b>{visible.length}</b></button>
       {#each addonNames as n (n)}
-        <button class="pill" class:on={addonFilter === n} onclick={() => (addonFilter = n)}>{n}</button>
+        <button class="pill" class:on={addonFilter === n} onclick={() => (addonFilter = n)} title={n}>
+          {n}<b>{visible.filter((x) => x.addonName === n).length}</b>
+        </button>
       {/each}
     </div>
   {/if}
 
   <div class="list">
     {#each shown as s, i (i + (s.url ?? s.infoHash ?? s.externalUrl ?? '') + s.addonId)}
-      {@const l = streamLabel(s)}
+      {@const d = describe(s)}
       {@const q = quality(s)}
-      {@const size = formatSize(sizeBytes(s))}
-      <div class="stream" role="button" tabindex="0" onclick={() => start(s)} onkeydown={(e) => e.key === 'Enter' && start(s)}>
-        <div class="q" class:hi={q === '4K' || q === '1080p'}>{q === '?' ? '—' : q}</div>
+      {@const t = tags(s).filter((x) => x !== 'Cached')}
+      {@const web = !!s.externalUrl && !s.url && !s.infoHash}
+      <div
+        class="stream"
+        role="button"
+        tabindex="0"
+        title={d.full}
+        onclick={() => start(s)}
+        onkeydown={(e) => e.key === 'Enter' && start(s)}
+      >
+        <div class="q" class:uhd={q === '4K'} class:fhd={q === '1080p'} class:low={q === 'CAM' || (q === '?' && !web)}>{web ? 'Link' : q === '?' ? '—' : q}</div>
         <div class="body">
-          <div class="name">{l.title}</div>
-          {#if l.detail}<div class="detail">{l.detail}</div>{/if}
+          <div class="line1">
+            <span class="src">{d.source}</span>
+            {#if d.service}<span class="svc" class:cached={d.cached} title={d.cached ? 'Cached on your debrid service — starts instantly' : 'Debrid'}>{#if d.cached}⚡{/if}{d.service}</span>{/if}
+          </div>
+          {#if d.file && d.file !== d.source}<div class="file">{d.file}</div>{/if}
           <div class="meta">
-            <span class="chip">{s.addonName}</span>
-            {#if size}<span class="chip">{size}</span>{/if}
-            {#each tags(s) as t (t)}<span class="chip accent">{t}</span>{/each}
-            {#if s.infoHash && !s.url}<span class="chip">P2P</span>{/if}
-            {#if s.externalUrl && !s.url && !s.infoHash}<span class="chip">External</span>{/if}
+            {#if d.size}<span>{d.size}</span>{/if}
+            {#if d.seeders !== null}<span>{d.seeders} seeds</span>{/if}
+            {#each t as tag (tag)}<span class="tag">{tag}</span>{/each}
+            {#if s.infoHash && !s.url}<span class="tag muted">P2P</span>{/if}
+            {#if web}<span>Opens in your browser</span>{/if}
           </div>
         </div>
-        <button class="icon-btn copy" title="Copy link" onclick={(e) => { e.stopPropagation(); copy(s); }}><Icon name="copy" size={16} /></button>
-        <div class="playicon"><Icon name="play" size={16} fill /></div>
+        <div class="actions">
+          <button class="icon-btn" title="Copy link" onclick={(e) => { e.stopPropagation(); copy(s); }}><Icon name="copy" size={15} /></button>
+          <span class="play"><Icon name="play" size={14} fill /></span>
+        </div>
       </div>
     {:else}
       {#if pending === 0}
@@ -183,56 +199,93 @@
       {/if}
     {/each}
     {#if pending > 0}
-      <div class="loading"><div class="spinner"></div> Waiting on {pending} addon{pending === 1 ? '' : 's'}…</div>
+      {#each Array(shown.length ? 1 : 4) as _, i (i)}<div class="stream ghost skeleton"></div>{/each}
+    {/if}
+
+    {#if hidden > 0 || showAll || errors.length}
+      <div class="foot">
+        {#if hidden > 0 || showAll}
+          <button class="btn ghost sm" onclick={() => (showAll = !showAll)}>
+            <Icon name="filter" size={14} />{showAll ? 'Hide filtered' : `Show ${hidden} hidden by filters`}
+          </button>
+        {/if}
+        {#if errors.length}<span class="err" title={errors.join('\n')}>{errors.length} addon{errors.length === 1 ? '' : 's'} didn't respond</span>{/if}
+      </div>
     {/if}
   </div>
-
-  {#if hidden > 0 || showAll || errors.length}
-    <footer>
-      {#if hidden > 0 || showAll}
-        <button class="btn ghost sm" onclick={() => (showAll = !showAll)}>
-          <Icon name="filter" size={14} />{showAll ? 'Apply filters' : `Show ${hidden} filtered`}
-        </button>
-      {/if}
-      {#if errors.length}<span class="faint err" title={errors.join('\n')}>{errors.length} addon error{errors.length === 1 ? '' : 's'}</span>{/if}
-    </footer>
-  {/if}
 </div>
 
 <style>
   .panel { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 12px; }
-  .ttl { font-weight: 700; font-size: 16px; }
-  .lbl { font-size: 12px; }
-  .tools { display: flex; gap: 6px; align-items: center; }
-  .select.sm { height: 30px; font-size: 12.5px; width: auto; }
-  .addons { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 12px; }
+  header { display: flex; align-items: center; gap: 8px; padding: 2px 2px 12px; }
+  .head-text { flex: 1; min-width: 0; }
+  .ttl { font-family: var(--font-display); font-weight: 800; font-size: 17px; letter-spacing: -0.01em; }
+  .sub { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dots::after { content: '…'; display: inline-block; width: 1em; animation: dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+  @keyframes dots { from { width: 0; } to { width: 1.2em; } }
+  .select.sm { height: 30px; font-size: 12.5px; width: auto; padding-left: 10px; }
+
+  .addons { display: flex; gap: 6px; overflow-x: auto; padding: 0 2px 12px; scrollbar-width: none; flex-shrink: 0; }
+  .addons::-webkit-scrollbar { display: none; }
   .pill {
-    border: 1px solid var(--line); background: none; height: 26px; padding: 0 10px; border-radius: 13px;
-    font-size: 12px; cursor: pointer; color: var(--text-2);
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 200px;
+    border: 1px solid var(--line); background: none; height: 28px; padding: 0 11px; border-radius: 14px;
+    font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: background var(--dur), color var(--dur), border-color var(--dur);
   }
+  .pill:hover { color: var(--text); border-color: var(--text-3); }
+  .pill b { font-weight: 700; font-size: 11px; opacity: 0.6; }
   .pill.on { background: var(--accent); border-color: transparent; color: var(--on-accent); }
-  .list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+  .pill.on b { opacity: 0.8; }
+
+  .list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; margin: 0 -6px; padding: 0 6px 4px; }
   .stream {
-    display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 10px; cursor: pointer;
-    background: var(--bg-2); border: 1px solid var(--line); transition: border-color var(--dur), background var(--dur);
+    position: relative; display: flex; gap: 12px; align-items: center; padding: 11px 10px 11px 12px; border-radius: 12px; cursor: pointer;
+    background: color-mix(in srgb, var(--text) 3.5%, transparent); border: 1px solid transparent;
+    transition: background var(--dur), border-color var(--dur);
   }
-  .stream:hover, .stream:focus-visible { border-color: var(--accent); background: var(--bg-3); }
+  .stream:hover, .stream:focus-visible { background: color-mix(in srgb, var(--text) 7%, transparent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); outline: none; }
+  .stream.ghost { height: 68px; cursor: default; border: 0; }
+
   .q {
-    width: 52px; flex-shrink: 0; text-align: center; font-weight: 800; font-size: 13px; color: var(--text-2);
-    padding: 6px 0; border-radius: 7px; background: var(--bg-3);
+    width: 52px; height: 26px; flex-shrink: 0; align-self: flex-start; margin-top: 1px; display: grid; place-items: center;
+    border-radius: 7px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.03em;
+    color: var(--text-2); background: var(--bg-3); border: 1px solid var(--line);
   }
-  .q.hi { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
-  .body { flex: 1; min-width: 0; }
-  .name { font-weight: 600; font-size: 13px; white-space: pre-line; }
-  .detail { font-size: 12px; color: var(--text-2); white-space: pre-line; margin-top: 2px; max-height: 3.2em; overflow: hidden; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-  .copy { opacity: 0; }
-  .stream:hover .copy { opacity: 1; }
-  .playicon { color: var(--accent); opacity: 0; transition: opacity var(--dur); }
-  .stream:hover .playicon { opacity: 1; }
-  .loading { display: flex; gap: 10px; align-items: center; padding: 14px 4px; color: var(--text-2); font-size: 13px; }
-  .empty { padding: 30px 10px; }
-  footer { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
-  .err { font-size: 12px; cursor: help; }
+  .q.uhd { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .q.fhd { color: var(--text); }
+  .q.low { opacity: 0.6; }
+
+  .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .line1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .src { font-weight: 700; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .svc {
+    flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 5px;
+    color: var(--text-2); border: 1px solid var(--line);
+  }
+  .svc.cached { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+  .file { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: 11.5px; color: var(--text-3); font-weight: 600; }
+  .meta > span:not(.tag):not(.from) + span:not(.tag):not(.from)::before { content: '·'; margin: 0 6px 0 -4px; }
+  .tag { padding: 1px 6px; border-radius: 5px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .tag.muted { background: var(--bg-3); color: var(--text-2); }
+
+  /* Hover actions float over the row's right edge so text can use the full width. */
+  .actions {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px;
+    padding-left: 28px; border-radius: 0 12px 12px 0; pointer-events: none;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg-2) 92%, transparent) 30%);
+    opacity: 0; transition: opacity var(--dur);
+  }
+  .stream:hover .actions, .stream:focus-visible .actions { opacity: 1; pointer-events: auto; }
+  .actions .icon-btn { width: 30px; height: 30px; }
+  .play {
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent);
+    opacity: 0; transform: scale(0.85); transition: opacity var(--dur), transform var(--dur);
+  }
+  .stream:hover .play, .stream:focus-visible .play { opacity: 1; transform: none; }
+
+  .empty { padding: 30px 10px; text-align: center; color: var(--text-2); }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 2px 2px; flex-wrap: wrap; }
+  .err { font-size: 12px; color: var(--text-3); cursor: help; }
 </style>

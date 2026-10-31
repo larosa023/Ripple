@@ -108,3 +108,63 @@ export function streamLabel(s: SourcedStream): { title: string; detail: string }
   const detail = (s.title || s.description || s.behaviorHints?.filename || '').trim();
   return { title, detail };
 }
+
+export interface StreamInfo {
+  /** Short source name, e.g. "Debridio 4k DV" or "Torrentio" */
+  source: string;
+  /** Debrid service abbreviation, e.g. "RD", "AD", "TB" */
+  service: string;
+  /** Instantly available on the debrid service */
+  cached: boolean;
+  /** File or release name, one line */
+  file: string;
+  size: string;
+  seeders: number | null;
+  /** Everything the addon said, for the hover tooltip */
+  full: string;
+}
+
+const SERVICE_RE = /\[(RD|AD|PM|DL|TB|OC|ED|EN|PK|TRB|DLS|SDB)(\+|⚡)?\]/i;
+// Lines that are only stats (📺 💾 👤 ⚙️ …) or language flags.
+const STAT_EMOJI_RE = /💾|👤|⚙|🔎|📺|🌐|🔊|🗣|⏱|📅|🧲|📦/u;
+const ONLY_FLAGS_RE = /^[\p{Regional_Indicator}\p{Extended_Pictographic}\u{FE0F}\u{200D}\s|/·•,]+$/u;
+const LEAD_EMOJI_RE = /^[\p{Extended_Pictographic}\u{FE0F}\u{200D}]+\s*/u;
+const RES_RE = /\b(4k|uhd|2160p|1080p|720p|480p|sd)\b/gi;
+
+/** Turns an addon's free-form name/title/description into tidy, consistent parts. */
+export function describe(s: SourcedStream): StreamInfo {
+  const rawName = (s.name ?? '').trim();
+  const rawText = (s.title || s.description || '').trim();
+  const all = `${rawName}\n${rawText}`;
+
+  const svc = all.match(SERVICE_RE);
+  const service = svc ? svc[1].toUpperCase() : '';
+  const cached = !!svc?.[2] || /⚡|\bcached\b|\binstant\b/i.test(all);
+
+  // The quality badge already shows the resolution, so drop it from the name.
+  const source =
+    rawName
+      .replace(SERVICE_RE, '')
+      .split('\n')
+      .map((l) => l.replace(RES_RE, '').replace(/^[\s|·•-]+|[\s|·•-]+$/g, '').replace(/\s{2,}/g, ' ').trim())
+      .filter(Boolean)
+      .join(' · ') || s.addonName;
+
+  const lines = rawText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !STAT_EMOJI_RE.test(l) && !ONLY_FLAGS_RE.test(l))
+    .map((l) => l.replace(LEAD_EMOJI_RE, ''));
+  const fileLine = s.behaviorHints?.filename || lines.find((l) => /[.\-_]/.test(l)) || lines[0] || '';
+  const seed = all.match(/👤\s*(\d+)/u);
+
+  return {
+    source,
+    service,
+    cached,
+    file: fileLine.replace(SERVICE_RE, '').trim(),
+    size: formatSize(sizeBytes(s)),
+    seeders: seed ? Number(seed[1]) : null,
+    full: [rawName.replace(/\n/g, ' '), rawText].filter(Boolean).join('\n'),
+  };
+}
