@@ -1,6 +1,8 @@
 import { isTauri } from './stremio/http';
 import { getSubtitles } from './stremio/client';
-import { playableUrl } from './stremio/streams';
+import { describe, playableUrl } from './stremio/streams';
+import { resolveDebrid } from './resolve';
+import { dismiss, toast } from './stores/toast.svelte';
 import type { InstalledAddon, SourcedStream } from './stremio/types';
 import { parseArgs, settings } from './stores/settings.svelte';
 
@@ -71,8 +73,22 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
     await openExternal(stream.externalUrl);
     return null;
   }
-  const url = playableUrl(stream, settings.streamingServer);
+  let url = playableUrl(stream, settings.streamingServer);
   if (!url) throw new Error('This stream has no playable link.');
+  const headers = Object.entries(stream.behaviorHints?.proxyHeaders?.request ?? {}) as [string, string][];
+
+  // Debrid links: resolve the addon's redirect ourselves so the player gets the file directly,
+  // and wait out the "being downloaded to debrid" placeholder instead of playing it.
+  if (stream.url && (describe(stream).service || /\/resolve\//i.test(stream.url))) {
+    let waitToast: number | null = null;
+    try {
+      url = await resolveDebrid(url, headers, () => {
+        waitToast ??= toast('Your debrid service is getting this file ready…', 'info', 20000);
+      });
+    } finally {
+      if (waitToast !== null) dismiss(waitToast);
+    }
+  }
 
   const langs = settings.subtitleLangs
     .split(',')
@@ -92,7 +108,6 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
       /* subtitles are best-effort */
     }
   }
-  const headers = Object.entries(stream.behaviorHints?.proxyHeaders?.request ?? {}) as [string, string][];
   return { url, subtitles, headers };
 }
 
