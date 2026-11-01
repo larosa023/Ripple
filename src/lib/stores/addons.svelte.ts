@@ -80,10 +80,12 @@ export function moveAddon(from: number, to: number) {
 export async function refreshAddons(): Promise<number> {
   let failed = 0;
   await Promise.all(
-    addons.list.map(async (a, i) => {
+    addons.list.map(async (a) => {
       try {
         const manifest = await fetchManifest(a.transportUrl);
-        addons.list[i] = { ...addons.list[i], manifest };
+        // Look it up again: the list may have been reordered or changed while we waited.
+        const j = addons.list.findIndex((x) => x.transportUrl === a.transportUrl);
+        if (j >= 0) addons.list[j] = { ...addons.list[j], manifest };
       } catch {
         failed++;
       }

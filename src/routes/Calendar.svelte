@@ -71,12 +71,13 @@
     return t;
   };
 
+  const DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   function dayTitle(d: Date): string {
     const diff = Math.round((+new Date(d.getFullYear(), d.getMonth(), d.getDate()) - +startOfToday()) / DAY);
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Tomorrow';
     if (diff === -1) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    return DAY_FMT.format(d);
   }
 
   function group(list: Entry[], newestFirst: boolean) {

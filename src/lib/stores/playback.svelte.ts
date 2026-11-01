@@ -172,9 +172,12 @@ function onProp(name: string, data: unknown) {
   }
 }
 
-async function subscribe() {
+/** Bumped on every open/close, so a slow start that finishes late knows it was superseded. */
+let startToken = 0;
+
+async function subscribe(token: number) {
   const { listen } = await import('@tauri-apps/api/event');
-  unlisteners = await Promise.all([
+  const list = await Promise.all([
     listen<{ name: string; data: unknown }>('player://prop', (e) => onProp(e.payload.name, e.payload.data)),
     listen('player://loaded', () => {
       playback.loaded = true;
@@ -192,6 +195,9 @@ async function subscribe() {
       if (playback.active) void closePlayer();
     }),
   ]);
+  // Superseded while subscribing (another video started or the player closed): don't leak these.
+  if (token !== startToken) list.forEach((u) => u());
+  else unlisteners = list;
 }
 
 function persistProgress() {
@@ -206,9 +212,11 @@ export async function openPlayer(
   // Switching videos (next episode): keep the player window, fullscreen and mini mode as they are.
   const keep = playback.active ? { fullscreen: playback.fullscreen, mini: playback.mini } : null;
   if (playback.active) teardown();
+  const token = ++startToken;
   firstTime = null;
   tracksApplied = false;
   aniskipFor = '';
+  lastAniSkip = [];
   Object.assign(playback, blank(), keep ?? {}, {
     active: true,
     title: info.title,
@@ -220,7 +228,8 @@ export async function openPlayer(
   });
   document.documentElement.classList.add('playing');
   try {
-    await subscribe();
+    await subscribe(token);
+    if (token !== startToken) return;
     const start = settings.resume ? resumePoint(info.videoId) : 0;
     await invoke('player_start', {
       req: {
@@ -235,9 +244,16 @@ export async function openPlayer(
         volume: settings.volume,
       },
     });
+    if (token !== startToken || !playback.active) {
+      // Closed (Back/Esc) or replaced while mpv was starting: make sure nothing keeps playing.
+      if (!playback.active) await invoke('player_stop').catch(() => {});
+      return;
+    }
     recordPlay(info.meta, info.videoId, info.subtitle);
+    clearInterval(saveTimer);
     saveTimer = setInterval(persistProgress, 5000);
   } catch (e) {
+    if (token !== startToken || String(e).startsWith('CANCELLED:')) return; // superseded; not an error
     await closePlayer(false);
     throw e;
   }
@@ -252,6 +268,7 @@ function teardown() {
 }
 
 export async function closePlayer(stopMpv = true) {
+  startToken++;
   teardown();
   if (stopMpv && isTauri) await invoke('player_stop').catch(() => {});
   if (playback.fullscreen) await setFullscreen(false);
@@ -370,14 +387,18 @@ export function layoutMini() {
     return;
   }
   const { x, y, w, h, vw, vh } = miniRect();
+  // The UI-scale setting zooms the page, so CSS sizes are divided by it; mpv's margins use real pixels.
+  const z = parseFloat(document.body.style.zoom) || 1;
+  const css = (n: number) => n / z;
   const r = 12;
-  root.style.setProperty('--mini-x', `${x}px`);
-  root.style.setProperty('--mini-y', `${y}px`);
-  root.style.setProperty('--mini-w', `${w}px`);
-  root.style.setProperty('--mini-h', `${h}px`);
+  const [cx, cy, cw, ch, cvw, cvh] = [x, y, w, h, vw, vh].map(css);
+  root.style.setProperty('--mini-x', `${cx}px`);
+  root.style.setProperty('--mini-y', `${cy}px`);
+  root.style.setProperty('--mini-w', `${cw}px`);
+  root.style.setProperty('--mini-h', `${ch}px`);
   // Everything except a rounded box: the app paints around it and mpv shows through.
-  const hole = `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
-  root.style.setProperty('--mini-clip', `path(evenodd, "M0 0H${vw}V${vh}H0Z${hole}")`);
+  const hole = `M${cx + r} ${cy}H${cx + cw - r}A${r} ${r} 0 0 1 ${cx + cw} ${cy + r}V${cy + ch - r}A${r} ${r} 0 0 1 ${cx + cw - r} ${cy + ch}H${cx + r}A${r} ${r} 0 0 1 ${cx} ${cy + ch - r}V${cy + r}A${r} ${r} 0 0 1 ${cx + r} ${cy}Z`;
+  root.style.setProperty('--mini-clip', `path(evenodd, "M0 0H${cvw}V${cvh}H0Z${hole}")`);
   setProp('video-margin-ratio-left', x / vw);
   setProp('video-margin-ratio-right', (vw - x - w) / vw);
   setProp('video-margin-ratio-top', y / vh);
@@ -397,7 +418,12 @@ export async function setMini(on: boolean) {
 // Commands go out one at a time so mpv's pipe never sees a burst of simultaneous connections.
 let queue: Promise<unknown> = Promise.resolve();
 export function mpv(...args: unknown[]): Promise<unknown> {
-  const run = () => invoke('player_command', { args }).then((r) => r ?? null).catch(() => undefined);
+  // Never let one stuck command hold up the queue (Rust also gives up after 4s).
+  const run = () =>
+    Promise.race([
+      invoke('player_command', { args }).then((r) => r ?? null).catch(() => undefined),
+      new Promise<undefined>((r) => setTimeout(() => r(undefined), 5000)),
+    ]);
   const p = queue.then(run, run);
   queue = p;
   return p;

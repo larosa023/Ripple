@@ -5,7 +5,7 @@
 //! JSON IPC: one long-lived pipe connection streams property changes to the UI
 //! as `player://*` events, and each command uses its own short connection.
 
-use crate::player::{hide_console, locate};
+use crate::player::{hide_console, locate_embeddable_mpv};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -17,7 +17,10 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-static PLAYER: Mutex<Option<Child>> = Mutex::new(None);
+/// The running mpv and the session it belongs to.
+static PLAYER: Mutex<Option<(u64, Child)>> = Mutex::new(None);
+/// Serializes starts so two quick clicks can't race each other.
+static START: Mutex<()> = Mutex::new(());
 /// Bumped on every start, so a listener from a previous video never emits stale events.
 static SESSION: AtomicU64 = AtomicU64::new(0);
 static REQUEST_ID: AtomicU32 = AtomicU32::new(1);
@@ -40,6 +43,8 @@ const OBSERVED: &[&str] = &[
     "idle-active",
     "video-params/w",
     "chapter-list",
+    // Reported as soon as we subscribe, so a file that loaded before we connected still counts as loaded.
+    "path",
 ];
 
 fn pipe_name() -> String {
@@ -99,11 +104,20 @@ pub struct EmbedRequest {
 /// Prefix the UI looks for to offer installing mpv.
 const NEED_MPV: &str = "NEED_MPV:";
 
+/// Asks mpv to quit without waiting for a reply (a hung mpv must never block us).
+fn send_quit() {
+    if let Ok(mut c) = connect() {
+        let _ = c.write_all(b"{\"command\":[\"quit\"]}\n");
+        let _ = c.flush();
+    }
+}
+
 fn stop_current() {
+    // Take the child out first so the lock is never held while waiting on a process.
     let child = PLAYER.lock().ok().and_then(|mut p| p.take());
-    if let Some(mut child) = child {
+    if let Some((_, mut child)) = child {
         // Ask nicely first so mpv can release the GPU cleanly, then make sure.
-        let _ = send(json!(["quit"]));
+        send_quit();
         let deadline = Instant::now() + Duration::from_millis(600);
         while Instant::now() < deadline {
             if matches!(child.try_wait(), Ok(Some(_))) {
@@ -138,13 +152,19 @@ fn start<R: Runtime>(app: AppHandle<R>, req: EmbedRequest, wid: i64) -> Result<(
 
 /// Starts mpv for `req` and returns a connected event pipe plus the session id.
 fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64), String> {
+    let _start = START.lock().unwrap_or_else(|e| e.into_inner());
+    // New session first: the old video's listener then sees it's stale and stays quiet
+    // instead of reporting "player exited" to the new one.
+    let session = SESSION.fetch_add(1, Ordering::SeqCst) + 1;
+    let current = || SESSION.load(Ordering::SeqCst) == session;
     stop_current();
 
     let exe = match req.path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
-        Some(p) if Path::new(p).is_file() && !p.to_ascii_lowercase().contains("vlc") => Path::new(p).to_path_buf(),
-        _ => locate("mpv")
-            // mpv.net is its own app and can't be embedded; it needs the real mpv.
-            .filter(|p| !p.to_string_lossy().to_ascii_lowercase().ends_with("mpvnet.exe"))
+        Some(p) if Path::new(p).is_file() && !p.to_ascii_lowercase().contains("vlc") && !p.to_ascii_lowercase().ends_with("mpvnet.exe") => {
+            Path::new(p).to_path_buf()
+        }
+        // mpv.net is its own app and can't be embedded; this finds the real mpv even when mpv.net is installed too.
+        _ => locate_embeddable_mpv()
             .ok_or_else(|| format!("{NEED_MPV}The built-in player needs mpv. Install it in one click."))?,
     };
 
@@ -200,11 +220,14 @@ fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64)
     let mut cmd = Command::new(&exe);
     cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     hide_console(&mut cmd);
+    if !current() {
+        return Err(CANCELLED.into()); // closed while we were finding mpv
+    }
     let child = cmd.spawn().map_err(|e| format!("Couldn't start mpv: {e}"))?;
-
-    let session = SESSION.fetch_add(1, Ordering::SeqCst) + 1;
-    if let Ok(mut p) = PLAYER.lock() {
-        *p = Some(child);
+    let stray = PLAYER.lock().ok().and_then(|mut p| p.replace((session, child)));
+    if let Some((_, mut old)) = stray {
+        let _ = old.kill();
+        let _ = old.wait();
     }
 
     // Wait for mpv's IPC server, then stream events from it.
@@ -212,14 +235,34 @@ fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64)
     let conn = loop {
         match connect() {
             Ok(c) => break c,
+            Err(_) if !current() => {
+                stop_session(session);
+                return Err(CANCELLED.into());
+            }
             Err(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(40)),
             Err(_) => {
-                stop_current();
+                stop_session(session);
                 return Err("mpv started but didn't respond. Try again, or switch to an external player in Settings.".into());
             }
         }
     };
+    if !current() {
+        stop_session(session);
+        return Err(CANCELLED.into());
+    }
     Ok((conn, session))
+}
+
+/// Error returned when a start was superseded by Back/Esc or another video; the UI ignores it.
+const CANCELLED: &str = "CANCELLED:";
+
+/// Stops mpv only if it still belongs to `session`.
+fn stop_session(session: u64) {
+    let child = PLAYER.lock().ok().and_then(|mut p| if p.as_ref().map(|(s, _)| *s) == Some(session) { p.take() } else { None });
+    if let Some((_, mut child)) = child {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 fn listen(mut conn: Conn, session: u64, emit: impl Fn(&str, Value)) {
@@ -231,6 +274,7 @@ fn listen(mut conn: Conn, session: u64, emit: impl Fn(&str, Value)) {
     }
     let _ = conn.flush();
     let current = || SESSION.load(Ordering::SeqCst) == session;
+    let mut loaded = false;
 
     for line in BufReader::new(conn).lines() {
         let Ok(line) = line else { break };
@@ -239,13 +283,20 @@ fn listen(mut conn: Conn, session: u64, emit: impl Fn(&str, Value)) {
         }
         let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
         match msg.get("event").and_then(Value::as_str) {
+            Some("property-change") if msg["name"] == "path" => {
+                if msg["data"].is_string() && !loaded {
+                    loaded = true;
+                    emit("player://loaded", json!({}));
+                }
+            }
             Some("property-change") => {
                 emit("player://prop", json!({ "name": msg["name"], "data": msg["data"] }));
             }
             Some("end-file") => {
                 emit("player://end", json!({ "reason": msg["reason"], "error": msg["file_error"] }));
             }
-            Some("file-loaded") => {
+            Some("file-loaded") if !loaded => {
+                loaded = true;
                 emit("player://loaded", json!({}));
             }
             _ => {}
@@ -253,10 +304,9 @@ fn listen(mut conn: Conn, session: u64, emit: impl Fn(&str, Value)) {
     }
     // Pipe closed: mpv exited (or was replaced by a newer video).
     if current() {
-        if let Ok(mut p) = PLAYER.lock() {
-            if let Some(mut child) = p.take() {
-                let _ = child.wait();
-            }
+        let child = PLAYER.lock().ok().and_then(|mut p| if p.as_ref().map(|(s, _)| *s) == Some(session) { p.take() } else { None });
+        if let Some((_, mut child)) = child {
+            let _ = child.wait(); // outside the lock
         }
         emit("player://exit", json!({}));
     }
@@ -280,6 +330,15 @@ fn send(command: Value) -> Result<Value, String> {
     let line = json!({ "command": command, "request_id": id }).to_string() + "\n";
     conn.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
     conn.flush().map_err(|e| e.to_string())?;
+    // Pipe reads can't time out on Windows, so read on a helper thread and stop waiting after a few seconds.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(read_reply(conn, id));
+    });
+    rx.recv_timeout(Duration::from_secs(4)).unwrap_or_else(|_| Err("Player didn't answer.".into()))
+}
+
+fn read_reply(conn: Conn, id: u32) -> Result<Value, String> {
     let mut reader = BufReader::new(conn);
     let mut buf = String::new();
     // mpv also broadcasts events on every connection; skip until our reply.
@@ -346,7 +405,7 @@ mod tests {
     #[test]
     fn drives_real_mpv() {
         let Ok(video) = std::env::var("RIPPLE_TEST_VIDEO") else { return };
-        if locate("mpv").is_none() {
+        if locate_embeddable_mpv().is_none() {
             return;
         }
         let req = EmbedRequest {
@@ -404,5 +463,51 @@ mod tests {
         listener.join().unwrap();
         assert!(PLAYER.lock().unwrap().is_none());
         eprintln!("REAL_MPV_TEST_RAN events={}", seen.lock().unwrap().len());
+    }
+
+    /// Switching videos (next episode) must not report the old mpv's exit, and must not leave it running.
+    #[test]
+    fn switching_videos_is_clean() {
+        let Ok(video) = std::env::var("RIPPLE_TEST_VIDEO") else { return };
+        if locate_embeddable_mpv().is_none() {
+            return;
+        }
+        let req = || EmbedRequest {
+            url: video.clone(),
+            title: None,
+            subtitles: vec![],
+            headers: vec![],
+            start_seconds: None,
+            path: None,
+            extra_args: vec![],
+            sub_langs: None,
+            volume: Some(0.0),
+        };
+        let headless = ["--vo=null".to_string(), "--ao=null".to_string()];
+        let first_events: Arc<StdMutex<Vec<String>>> = Arc::default();
+        let (c1, s1) = spawn_mpv(&req(), &headless).unwrap();
+        let sink = first_events.clone();
+        let l1 = std::thread::spawn(move || listen(c1, s1, move |ev, _| sink.lock().unwrap().push(ev.to_string())));
+        std::thread::sleep(Duration::from_millis(800));
+        let first_pid = PLAYER.lock().unwrap().as_ref().map(|(_, c)| c.id()).unwrap();
+
+        let second_events: Arc<StdMutex<Vec<String>>> = Arc::default();
+        let (c2, s2) = spawn_mpv(&req(), &headless).unwrap();
+        let sink = second_events.clone();
+        let l2 = std::thread::spawn(move || listen(c2, s2, move |ev, _| sink.lock().unwrap().push(ev.to_string())));
+        l1.join().unwrap(); // the old listener ends once its mpv is gone
+        std::thread::sleep(Duration::from_millis(800));
+
+        assert!(!first_events.lock().unwrap().iter().any(|e| e == "player://exit"), "old video must not report exit");
+        assert!(second_events.lock().unwrap().iter().any(|e| e == "player://loaded"), "new video should load");
+        let second_pid = PLAYER.lock().unwrap().as_ref().map(|(_, c)| c.id()).unwrap();
+        assert_ne!(first_pid, second_pid);
+        assert!(!std::path::Path::new(&format!("/proc/{first_pid}")).exists() || std::fs::read_to_string(format!("/proc/{first_pid}/stat")).map(|s| s.contains(") Z ")).unwrap_or(true), "old mpv must be gone");
+
+        // Stopping while a start is pending cancels it instead of leaving mpv running.
+        SESSION.fetch_add(1, Ordering::SeqCst);
+        stop_current();
+        l2.join().unwrap();
+        assert!(PLAYER.lock().unwrap().is_none());
     }
 }

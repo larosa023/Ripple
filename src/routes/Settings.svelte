@@ -76,6 +76,8 @@
   const QUALITIES: Quality[] = ['4K', '1080p', '720p', '480p', 'SD'];
 
   let detected: DetectedPlayer[] = $state([]);
+  // 'mpv-embed' is the real mpv the built-in player needs (mpv.net doesn't count); the rest are external players.
+  const externals = $derived(detected.filter((d) => d.player !== 'mpv-embed'));
   let fileInput: HTMLInputElement | undefined = $state();
 
   let detecting = $state(true);
@@ -123,8 +125,7 @@
     if (!file) return;
     try {
       importAll(await file.text());
-      toast('Backup restored — reloading', 'success');
-      setTimeout(() => location.reload(), 600);
+      location.reload(); // right away, before anything in memory can be saved over the backup
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -193,7 +194,7 @@
           </div>
 
         {:else if section === 'playback'}
-          {@const mpvFound = detected.find((d) => d.player === 'mpv')}
+          {@const mpvFound = detected.find((d) => d.player === 'mpv-embed')}
           <div class="group">
             <SettingRow title="Play videos" description={settings.playIn === 'ripple' ? 'Inside Ripple, with its own controls (uses mpv behind the scenes).' : 'In a separate player window.'}>
               <div class="seg">
@@ -245,7 +246,7 @@
                 <div class="missing">
                   <span>
                     {settings.player === 'mpv' ? 'mpv' : 'VLC'} wasn't found on this PC.
-                    {#if detected.length}Ripple will use {detected[0].player === 'mpv' ? 'mpv' : 'VLC'} instead until you install it.{/if}
+                    {#if externals.length}Ripple will use {externals[0].player === 'mpv' ? 'mpv' : 'VLC'} instead until you install it.{/if}
                   </span>
                   {#if settings.player === 'mpv'}
                     <button class="btn primary sm" disabled={installingMpv} onclick={doInstallMpv}>

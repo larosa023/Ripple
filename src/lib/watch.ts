@@ -53,7 +53,7 @@ export async function playStream(s: SourcedStream, info: PlayInfo): Promise<void
     await openPlayer(prepared, { title: meta.name, subtitle: label, meta, videoId, stream: s });
   } else {
     await playExternal(prepared, label ? `${meta.name} — ${label}` : meta.name);
-    recordPlay(meta, videoId, label);
+    recordPlay(meta, videoId, label, true);
     toast('Opening player…', 'success', 2000);
   }
 }
@@ -102,29 +102,35 @@ export function pickStream(meta: MetaDetail, videoId: string, prev: SourcedStrea
     getStreams(enabledAddons(), meta.type, videoId, (list) => {
       latest = list;
       if (done || !group) return;
-      const hit = playable(list).find((s) => s.behaviorHints?.bingeGroup === group);
-      if (hit) {
-        done = true;
-        resolve(hit);
+      try {
+        const hit = playable(list).find((s) => s.behaviorHints?.bingeGroup === group);
+        if (hit) {
+          done = true;
+          resolve(hit);
+        }
+      } catch {
+        /* odd addon data: keep waiting for the rest */
       }
-    }).then(() => {
-      if (!done) resolve(best(latest));
-    });
+    })
+      .then(() => {
+        if (!done) resolve(best(latest));
+      })
+      .catch(() => resolve(null));
   });
 }
 
 // ---------- next episode ----------
 
-let prefetchFor = '';
+let noNextFor: unknown = null;
 
-/** Looks up the next episode and its source in the background. */
+/** Looks up the next episode and its source in the background (once per playback). */
 export function prefetchNext() {
   const meta = playback.meta as MetaDetail | null;
-  if (!meta || !isEpisodic(meta) || prefetchFor === playback.videoId) return;
-  prefetchFor = playback.videoId;
+  // playback.next is cleared on every open, so rewatching the same episode looks it up again.
+  if (!meta || !isEpisodic(meta) || playback.next || noNextFor === playback.source) return;
   const v = nextVideo(meta, playback.videoId);
   if (!v) {
-    playback.next = null;
+    noNextFor = playback.source; // last episode: don't recompute on every tick
     return;
   }
   const forVideo = playback.videoId;

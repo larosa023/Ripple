@@ -133,8 +133,37 @@ export function normalizeLook(input: Partial<Look>): Look {
     items.splice(at > 0 ? at : items.length, 0, { ...n });
   });
   merged.navItems = items;
+  // A theme file can contain anything: keep only values Ripple understands, so a bad file can't
+  // break the app on every launch.
+  for (const [key, allowed] of Object.entries(CHOICES) as [keyof Look, readonly string[]][]) {
+    if (!allowed.includes(merged[key] as string)) (merged as unknown as Record<string, unknown>)[key] = base[key];
+  }
+  for (const key of Object.keys(base) as (keyof Look)[]) {
+    const want = typeof base[key];
+    if (want === 'number' && !Number.isFinite(merged[key] as number)) (merged as unknown as Record<string, unknown>)[key] = base[key];
+    else if ((want === 'boolean' || want === 'string') && typeof merged[key] !== want) (merged as unknown as Record<string, unknown>)[key] = base[key];
+  }
+  for (const k of Object.keys(base.colors) as (keyof Palette)[]) {
+    if (typeof merged.colors[k] !== 'string' || !/^#[0-9a-f]{3,8}$/i.test(merged.colors[k])) merged.colors[k] = base.colors[k];
+  }
+  merged.uiScale = Math.min(1.5, Math.max(0.7, merged.uiScale));
+  if (merged.customFont && (typeof merged.customFont.name !== 'string' || typeof merged.customFont.dataUrl !== 'string')) merged.customFont = null;
   return merged;
 }
+
+const CHOICES = {
+  nav: ['sidebar', 'rail', 'icons', 'top', 'dock'],
+  cardStyle: ['plain', 'outlined', 'elevated', 'glass', 'overlay'],
+  hover: ['lift', 'zoom', 'glow', 'none'],
+  buttonStyle: ['rounded', 'pill', 'square'],
+  density: ['compact', 'cozy', 'comfy'],
+  posterSize: ['small', 'medium', 'large', 'xl'],
+  hero: ['full', 'compact', 'off'],
+  cwStyle: ['wide', 'poster'],
+  detailLayout: ['cinematic', 'classic'],
+  episodeLayout: ['list', 'grid'],
+  bgAnimation: ['none', 'aurora', 'bokeh'],
+} as const satisfies Partial<Record<keyof Look, readonly string[]>>;
 
 const stored = localStorage.getItem('ripple:look');
 export const look: Look = $state(stored ? normalizeLook(load<Partial<Look>>('look', {})) : migrate());

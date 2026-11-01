@@ -52,12 +52,16 @@ export function toggleSaved(meta: MetaPreview) {
   else library.saved.unshift({ meta: slim(meta), addedAt: Date.now() });
 }
 
-export function recordPlay(meta: MetaPreview, videoId: string, label: string) {
+/**
+ * Adds to Continue watching. `markWatched` is for external players, where Ripple can't see
+ * progress; the built-in player marks a video watched when you actually finish it (saveProgress).
+ */
+export function recordPlay(meta: MetaPreview, videoId: string, label: string, markWatched = false) {
   library.history = [
     { meta: slim(meta), videoId, label, watchedAt: Date.now() },
     ...library.history.filter((h) => h.meta.id !== meta.id),
   ].slice(0, 50);
-  if (!library.watched.includes(videoId)) library.watched.push(videoId);
+  if (markWatched && !library.watched.includes(videoId)) library.watched.push(videoId);
 }
 
 export function isWatched(videoId: string): boolean {

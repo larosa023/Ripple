@@ -44,6 +44,9 @@ fn allowed_url(url: &str) -> bool {
 fn exe_names(player: &str) -> &'static [&'static str] {
     match (player, cfg!(windows)) {
         ("mpv", true) => &["mpv.exe", "mpvnet.exe"],
+        // The built-in player needs real mpv (mpv.net can't render into another window).
+        ("mpv-embed", true) => &["mpv.exe"],
+        ("mpv-embed", false) => &["mpv"],
         ("vlc", true) => &["vlc.exe"],
         ("mpv", false) => &["mpv"],
         ("vlc", false) => &["vlc"],
@@ -210,6 +213,11 @@ fn walk(dir: &Path, names: &[&str], depth: usize, visited: &mut usize) -> Option
 static FOUND: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
 
 /// Finds a player: cached hit, known paths, PATH (live + saved), then a shallow search.
+/// Real mpv for the built-in player, skipping mpv.net even if it's found first.
+pub(crate) fn locate_embeddable_mpv() -> Option<PathBuf> {
+    locate("mpv-embed")
+}
+
 pub(crate) fn locate(player: &str) -> Option<PathBuf> {
     if let Ok(cache) = FOUND.lock() {
         if let Some((_, p)) = cache.iter().find(|(k, p)| k == player && p.is_file()) {
@@ -217,9 +225,14 @@ pub(crate) fn locate(player: &str) -> Option<PathBuf> {
         }
     }
     let names = exe_names(player);
-    let found = known_paths(player)
+    let base = if player == "mpv-embed" { "mpv" } else { player };
+    let allowed = |p: &PathBuf| {
+        let file = p.file_name().map(|f| f.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        names.iter().any(|n| n.eq_ignore_ascii_case(&file))
+    };
+    let found = known_paths(base)
         .into_iter()
-        .find(|p| p.is_file())
+        .find(|p| p.is_file() && allowed(p))
         .or_else(|| path_dirs().into_iter().flat_map(|d| names.iter().map(move |n| d.join(n))).find(|p| p.is_file()))
         .or_else(|| search_dirs(player))?;
     if let Ok(mut cache) = FOUND.lock() {
@@ -270,7 +283,7 @@ pub(crate) fn hide_console(_cmd: &mut Command) {}
 #[tauri::command]
 pub async fn detect_players() -> Vec<DetectedPlayer> {
     tauri::async_runtime::spawn_blocking(|| {
-        ["mpv", "vlc"]
+        ["mpv", "vlc", "mpv-embed"]
             .iter()
             .filter_map(|p| {
                 locate(p).map(|path| DetectedPlayer {
@@ -309,7 +322,7 @@ pub async fn install_mpv() -> Result<String, String> {
         if let Ok(mut cache) = FOUND.lock() {
             cache.clear();
         }
-        match locate("mpv") {
+        match locate_embeddable_mpv() {
             Some(p) => Ok(p.to_string_lossy().into_owned()),
             None if out.status.success() => Err("mpv installed, but Ripple couldn't find it yet. Restart Ripple and try again.".into()),
             None => {

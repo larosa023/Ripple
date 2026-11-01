@@ -54,7 +54,8 @@ mod imp {
     }
 
     pub fn set(client_id: &str, activity: Option<Value>) -> Result<(), String> {
-        let mut guard = CONN.lock().map_err(|_| "busy".to_string())?;
+        // try_lock: if a previous update is stuck waiting on Discord, skip this one rather than pile up.
+        let mut guard = CONN.try_lock().map_err(|_| "Discord is busy.".to_string())?;
         for attempt in 0..2 {
             if guard.as_ref().map(|(id, _)| id != client_id).unwrap_or(true) {
                 *guard = None;
@@ -91,7 +92,8 @@ mod imp {
     }
 
     pub fn close() {
-        if let Ok(mut g) = CONN.lock() {
+        // Never block app exit on a stuck Discord pipe.
+        if let Ok(mut g) = CONN.try_lock() {
             *g = None;
         }
     }

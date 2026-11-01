@@ -9,8 +9,10 @@ function text(s: SourcedStream): string {
 }
 
 export function quality(s: SourcedStream): Quality {
-  const t = text(s).toLowerCase();
-  if (/\b(cam|camrip|hdcam|ts|telesync|hdts)\b/.test(t)) return 'CAM';
+  const raw = text(s);
+  const t = raw.toLowerCase();
+  // "TS" (telesync) only as an upper-case release tag, so ".ts" files and words like "ts" in other text aren't hidden.
+  if (/\b(cam|camrip|hdcam|telesync|hdts|hd-ts|tsrip)\b/.test(t) || /(?:^|[\s.[(_-])TS(?=[\s.\])_-])/.test(raw)) return 'CAM';
   if (/\b(2160p|4k|uhd)\b/.test(t)) return '4K';
   if (/\b1080p\b/.test(t)) return '1080p';
   if (/\b720p\b/.test(t)) return '720p';

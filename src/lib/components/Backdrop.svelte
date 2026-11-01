@@ -1,5 +1,115 @@
 <script lang="ts">
+  // Animated backgrounds are drawn on a tiny canvas (about 1/8 of the window)
+  // that the GPU stretches to full size. Soft glows look identical at that
+  // resolution, and each frame costs a few thousand pixels instead of millions.
+  // The animation runs at ~12 fps and pauses while scrolling, during playback,
+  // and when the window is hidden, so it never competes with the UI.
   import { look } from '../theme/look.svelte';
+
+  let canvas: HTMLCanvasElement | undefined = $state();
+
+  function mix(hex: string, other: string, t: number): [number, number, number] {
+    const p = (h: string) => {
+      const n = parseInt(h.replace('#', '').padEnd(6, '0').slice(0, 6), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+    const a = p(hex);
+    const b = p(other);
+    return [0, 1, 2].map((i) => Math.round(a[i] * (1 - t) + b[i] * t)) as [number, number, number];
+  }
+
+  $effect(() => {
+    const cv = canvas;
+    const kind = look.bgAnimation;
+    const accent = look.colors.accent || '#5b8cff';
+    const still = look.reduceMotion;
+    if (!cv || kind === 'none') return;
+    const ctx = cv.getContext('2d', { alpha: true });
+    if (!ctx) return;
+
+    const SCALE = kind === 'bokeh' ? 0.25 : 0.125;
+    const size = () => {
+      cv.width = Math.max(32, Math.round(window.innerWidth * SCALE));
+      cv.height = Math.max(20, Math.round(window.innerHeight * SCALE));
+    };
+    size();
+
+    const c1 = mix(accent, accent, 0);
+    const c2 = mix(accent, '#7a3cff', 0.45);
+    const c3 = mix(accent, '#00d4ff', 0.55);
+    const rgba = (c: number[], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+    function glow(x: number, y: number, r: number, c: number[], a: number) {
+      const g = ctx!.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, rgba(c, a));
+      g.addColorStop(1, rgba(c, 0));
+      ctx!.fillStyle = g;
+      ctx!.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+
+    function draw(t: number) {
+      const w = cv!.width;
+      const h = cv!.height;
+      const m = Math.max(w, h);
+      ctx!.clearRect(0, 0, w, h);
+      if (kind === 'aurora') {
+        // Three slow drifting glows (periods 30s / 36s / 42s), like the old CSS version.
+        const e = (period: number, phase = 0) => (1 - Math.cos(((t / 1000 + phase) / period) * Math.PI * 2)) / 2;
+        const a1 = e(60);
+        const a2 = e(72, 10);
+        const a3 = e(84);
+        glow(-0.3 * m + 0.45 * m + a1 * 0.1 * m, -0.45 * m + 0.45 * m + a1 * 0.07 * m, 0.45 * m * (1 + 0.12 * a1), c1, 0.32);
+        glow(w + 0.35 * m - 0.45 * m + a2 * 0.1 * m, h + 0.5 * m - 0.45 * m + a2 * 0.07 * m, 0.45 * m * (1 + 0.12 * a2), c2, 0.32);
+        glow(w * 0.3 + 0.3 * m + a3 * 0.1 * m, h * 0.15 + 0.3 * m + a3 * 0.07 * m, 0.3 * m * (1 + 0.12 * a3), c3, 0.18);
+      } else {
+        for (let i = 0; i < 14; i++) {
+          const r = ((40 + ((i * 13) % 120)) / 2) * SCALE;
+          const p = (1 - Math.cos(((t / 1000 + i * 1.7) / 36) * Math.PI * 2)) / 2;
+          const x = (((i * 37) % 100) / 100) * w + r + p * 40 * SCALE;
+          const y = (((i * 53) % 100) / 100) * h + r - p * 60 * SCALE;
+          glow(x, y, r, c1, 0.4 - 0.25 * p);
+        }
+      }
+    }
+
+    let raf = 0;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let scrolling = 0;
+    const onScroll = () => (scrolling = performance.now());
+    const paused = () =>
+      document.hidden ||
+      (document.documentElement.classList.contains('playing') && !document.documentElement.classList.contains('mini'));
+
+    // A timer (not a per-vsync loop) so the page sleeps between frames: ~12 fps is plenty for glows
+    // that drift a few pixels a second. Skips frames while scrolling, playing or hidden.
+    function tick() {
+      if (performance.now() - scrolling < 250 || paused()) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(draw);
+    }
+
+    draw(performance.now());
+    if (!still) timer = setInterval(tick, 83);
+    const onResize = () => {
+      size();
+      draw(performance.now());
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    window.addEventListener('wheel', onScroll, { capture: true, passive: true });
+    window.addEventListener('pointermove', onPointer, { capture: true, passive: true });
+    function onPointer(e: PointerEvent) {
+      if (e.buttons) onScroll(); // dragging a row
+    }
+    return () => {
+      clearInterval(timer);
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, { capture: true });
+      window.removeEventListener('wheel', onScroll, { capture: true });
+      window.removeEventListener('pointermove', onPointer, { capture: true });
+    };
+  });
 </script>
 
 {#if look.bgImage || look.bgAnimation !== 'none'}
@@ -12,12 +122,8 @@
         style:inset={look.bgBlur ? `-${look.bgBlur * 2}px` : '0'}
       ></div>
     {/if}
-    {#if look.bgAnimation === 'aurora'}
-      <div class="aurora"><span></span><span></span><span></span></div>
-    {:else if look.bgAnimation === 'bokeh'}
-      <div class="bokeh">
-        {#each Array(14) as _, i (i)}<span style:--i={i}></span>{/each}
-      </div>
+    {#if look.bgAnimation !== 'none'}
+      <canvas class="anim" bind:this={canvas}></canvas>
     {/if}
     <div class="dim" style:opacity={look.bgImage ? look.bgDim : 0.35}></div>
   </div>
@@ -27,39 +133,5 @@
   .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; contain: strict; }
   .img { position: absolute; background-size: cover; background-position: center; }
   .dim { position: absolute; inset: 0; background: var(--bg); }
-
-  /* Soft glows drawn with gradients (no blur filter) and moved with transforms only, so the GPU
-     composites them cheaply and nothing behind or in front has to re-render each frame. */
-  .aurora { position: absolute; inset: 0; }
-  .aurora span {
-    position: absolute; width: 90vmax; height: 90vmax; border-radius: 50%; opacity: 0.32;
-    background: radial-gradient(closest-side, var(--accent), transparent);
-    animation: drift 30s ease-in-out infinite alternate; will-change: transform;
-  }
-  .aurora span:nth-child(1) { top: -45vmax; left: -30vmax; }
-  .aurora span:nth-child(2) {
-    bottom: -50vmax; right: -35vmax; animation-duration: 36s; animation-delay: -10s;
-    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 55%, #7a3cff), transparent);
-  }
-  .aurora span:nth-child(3) {
-    top: 15%; left: 30%; width: 60vmax; height: 60vmax; animation-duration: 42s; opacity: 0.18;
-    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 45%, #00d4ff), transparent);
-  }
-  @keyframes drift {
-    to { transform: translate3d(10vmax, 7vmax, 0) scale(1.12); }
-  }
-
-  .bokeh span {
-    --size: calc(40px + (var(--i) * 13px) % 120px);
-    position: absolute; width: var(--size); height: var(--size); border-radius: 50%;
-    left: calc((var(--i) * 37%) % 100%); top: calc((var(--i) * 53%) % 100%);
-    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 70%, transparent), transparent 70%);
-    opacity: 0.4; animation: float 18s ease-in-out infinite alternate; will-change: transform, opacity;
-    animation-delay: calc(var(--i) * -1.7s);
-  }
-  @keyframes float {
-    to { transform: translate3d(40px, -60px, 0); opacity: 0.15; }
-  }
-  :global(:root[data-motion='reduce']) .aurora span,
-  :global(:root[data-motion='reduce']) .bokeh span { animation: none; }
+  .anim { position: absolute; inset: 0; width: 100%; height: 100%; }
 </style>

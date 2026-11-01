@@ -78,10 +78,12 @@
   function epLabel(v: Video): string {
     return [epCode(v), v.title ?? v.name ?? ''].filter(Boolean).join(' · ');
   }
+  // One shared formatter: creating Intl formatters per call is slow (it showed up as the top cost when opening long shows).
+  const DATE_FMT = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   function fmtDate(d?: string) {
     if (!d) return '';
     const dt = new Date(d);
-    return isNaN(+dt) ? '' : dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return isNaN(+dt) ? '' : DATE_FMT.format(dt);
   }
   const unreleased = (v: Video) => !!v.released && new Date(v.released) > new Date();
   const byOrder = (a: Video, b: Video) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? a.number ?? 0) - (b.episode ?? b.number ?? 0);
