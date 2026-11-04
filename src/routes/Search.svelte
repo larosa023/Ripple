@@ -8,6 +8,7 @@
   import { addons } from '../lib/stores/addons.svelte';
   import { go, router } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
+  import { untrack } from 'svelte';
 
   interface Group {
     key: string;
@@ -28,10 +29,22 @@
   const searchable = $derived(
     addons.list
       .filter((a) => a.enabled && !(settings.hideAdultAddons && a.manifest.behaviorHints?.adult))
-      .flatMap((a) => a.manifest.catalogs.filter(supportsSearch).map((c) => ({ addon: a, catalog: c }))),
+      .flatMap((a) => a.manifest.catalogs.filter(supportsSearch).map((c) => ({ addon: a, catalog: c })))
+      .filter((t, i, all) => all.findIndex((x) => x.addon.manifest.id === t.addon.manifest.id && x.catalog.type === t.catalog.type && x.catalog.id === t.catalog.id) === i),
   );
+  // Re-search only when the set of searchable catalogs changes, not when manifests merely refresh.
+  const searchableKey = $derived(searchable.map((t) => `${t.addon.manifest.id}|${t.catalog.type}|${t.catalog.id}`).join(','));
+
+  // Back/Forward between searches: keep the box in step with what's shown.
+  $effect(() => {
+    const q = query;
+    untrack(() => {
+      if (input.trim() !== q) input = q;
+    });
+  });
 
   $effect(() => {
+    void searchableKey;
     const q = query.trim();
     const my = ++token;
     groups = [];
@@ -39,7 +52,7 @@
       pending = 0;
       return;
     }
-    const targets = searchable;
+    const targets = untrack(() => searchable);
     pending = targets.length;
     for (const { addon, catalog } of targets) {
       getCatalog(addon, catalog.type, catalog.id, { search: q })
@@ -61,11 +74,18 @@
 
   function onInput() {
     clearTimeout(timer);
-    timer = setTimeout(() => go('search', [], input.trim() ? { q: input.trim() } : undefined), 350);
+    // Typing refines the current search in place, so Back goes to the page before Search, not each keystroke.
+    timer = setTimeout(() => {
+      const q = input.trim();
+      if (q !== query) go('search', [], q ? { q } : undefined, true);
+    }, 350);
   }
 
   $effect(() => {
     inputEl?.focus();
+    const focus = () => inputEl?.select();
+    window.addEventListener('ripple:focus-search', focus);
+    return () => window.removeEventListener('ripple:focus-search', focus);
   });
 </script>
 

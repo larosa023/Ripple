@@ -30,7 +30,9 @@ export function boardCatalogs(addons: InstalledAddon[], hideAdult: boolean): Boa
         catalog: c,
         title: `${c.name ?? c.id} ${typeLabel(c.type)}`,
       })),
-    );
+    )
+    // An addon can list the same catalog twice; rows are keyed, so keep the first.
+    .filter((b, i, all) => all.findIndex((x) => x.key === b.key) === i);
 }
 
 /**

@@ -34,10 +34,11 @@ export async function sendDiscord(force = false): Promise<string | null> {
   const key = act ? JSON.stringify({ ...act, timestamps: undefined }) : 'none';
   const ts = (act?.timestamps as { start: number } | undefined)?.start ?? 0;
   if (!force && key === lastKey && Math.abs(ts - lastSent) < 4000) return null;
-  lastKey = key;
-  lastSent = ts;
   try {
     await invoke('discord_set', { clientId: settings.discordAppId.trim() || '0', activity: act });
+    // Remember what Discord shows only once it took it, so a failed update is retried next tick.
+    lastKey = key;
+    lastSent = ts;
     warned = false;
     return null;
   } catch (e) {

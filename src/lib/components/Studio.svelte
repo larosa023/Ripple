@@ -52,7 +52,9 @@
   }
 
   async function pickFont(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // so choosing the same file again still triggers a change
     if (!file) return;
     try {
       look.customFont = { name: file.name.replace(/\.[^.]+$/, ''), dataUrl: await readFile(file, 3) };
@@ -62,7 +64,9 @@
   }
 
   async function pickBg(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // so choosing the same file again still triggers a change
     if (!file) return;
     try {
       look.bgImage = await readFile(file, 4);
@@ -109,7 +113,9 @@
     download(`${t.name.replace(/[^\w-]+/g, '-').toLowerCase()}.ripplestyle`, themeFile(t));
   }
   async function importTheme(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // so choosing the same file again still triggers a change
     if (!file) return;
     try {
       const t = parseThemeFile(await file.text());
@@ -119,7 +125,6 @@
     } catch (err) {
       toast((err as Error).message, 'error');
     }
-    (e.currentTarget as HTMLInputElement).value = '';
   }
 
   $effect(() => {

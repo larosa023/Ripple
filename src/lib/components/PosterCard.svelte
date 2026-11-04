@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { MetaPreview } from '../stremio/types';
-  import { href } from '../stores/router.svelte';
+  import { go, href } from '../stores/router.svelte';
+  import { isSaved, isWatched, library, removeFromContinue, toggleSaved, toggleWatched } from '../stores/library.svelte';
+  import { openMenu, type MenuItem } from '../stores/ui.svelte';
+  import { toast } from '../stores/toast.svelte';
+  import { openExternal } from '../player';
+  import { filmUrl } from '../letterboxd';
   import { look } from '../theme/look.svelte';
   import Icon from './Icon.svelte';
   import { backdropOf, logoOf } from '../stremio/images';
@@ -24,6 +29,33 @@
     progress?: number;
   } = $props();
 
+  function menu(e: MouseEvent) {
+    const movie = meta.type === 'movie';
+    const items: MenuItem[] = [
+      { label: 'Open', icon: 'chevronRight', run: () => go('detail', [meta.type, meta.id]) },
+      isSaved(meta.id)
+        ? { label: 'Remove from library', icon: 'check', run: () => toggleSaved(meta) }
+        : { label: 'Add to library', icon: 'plus', run: () => toggleSaved(meta) },
+    ];
+    if (movie) {
+      items.push({ label: isWatched(meta.id) ? 'Mark as unwatched' : 'Mark as watched', icon: 'eye', run: () => toggleWatched(meta.id) });
+    }
+    if (library.history.some((h) => h.meta.id === meta.id)) {
+      items.push({
+        label: 'Remove from Continue watching',
+        icon: 'x',
+        run: () => {
+          const undo = removeFromContinue(meta.id);
+          toast(`Removed ${meta.name}`, 'info', 6000, { label: 'Undo', run: undo });
+        },
+      });
+    }
+    if (meta.id.startsWith('tt')) items.push({ label: 'Open on IMDb', icon: 'external', run: () => openExternal(`https://www.imdb.com/title/${meta.id.split(':')[0]}/`) });
+    const lb = movie ? filmUrl(meta) : null;
+    if (lb) items.push({ label: 'Open on Letterboxd', icon: 'external', run: () => openExternal(lb) });
+    openMenu(e, items, meta.name);
+  }
+
   let failed = $state(false);
   const wide = $derived(variant === 'wide' || meta.posterShape === 'landscape');
   const square = $derived(!wide && meta.posterShape === 'square');
@@ -41,6 +73,7 @@
   class:fill
   href={href('detail', meta.type, meta.id)}
   title={meta.name}
+  oncontextmenu={menu}
 >
   {#if variant === 'top10'}<span class="rank" aria-hidden="true">{rank}</span>{/if}
   <div class="frame">

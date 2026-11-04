@@ -46,7 +46,7 @@
       <div class="scroller" use:dragScroll>
         {#each library.history.slice(0, 20) as h (h.meta.id)}
           <div class="cw-item">
-            <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} progress={library.progress?.[h.videoId] ? library.progress[h.videoId].t / library.progress[h.videoId].d : 0} />
+            <PosterCard meta={h.meta} subtitle={h.label} variant={look.cwStyle === 'wide' ? 'wide' : 'poster'} progress={library.progress?.[h.videoId]?.d ? Math.min(1, library.progress[h.videoId].t / library.progress[h.videoId].d) : 0} />
             <button
               class="cw-remove"
               title="Remove from Continue watching"

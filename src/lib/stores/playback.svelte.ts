@@ -271,8 +271,10 @@ export async function closePlayer(stopMpv = true) {
   startToken++;
   teardown();
   if (stopMpv && isTauri) await invoke('player_stop').catch(() => {});
-  if (playback.fullscreen) await setFullscreen(false);
-  Object.assign(playback, blank());
+  // Leave fullscreen only if the player turned it on; fullscreen chosen on a page stays.
+  if (playback.fullscreen && playerFullscreen) await setFullscreen(false);
+  const keepFs = playback.fullscreen;
+  Object.assign(playback, blank(), { fullscreen: keepFs });
   document.documentElement.classList.remove('playing', 'mini');
 }
 
@@ -468,7 +470,13 @@ export function cycleSubs() {
   setSub(i + 1 < subs.length ? subs[i + 1].id : false);
 }
 
-export async function setFullscreen(on: boolean) {
+/** True when the current fullscreen was entered from the player (so closing it should exit). */
+let playerFullscreen = false;
+
+/** Window fullscreen, shared by the player and pages (one source of truth). */
+export async function setFullscreen(on: boolean, fromPlayer = true) {
+  if (on) playerFullscreen = fromPlayer && (playback.active || playerFullscreen);
+  else playerFullscreen = false;
   playback.fullscreen = on;
   if (!isTauri) return;
   const { getCurrentWindow } = await import('@tauri-apps/api/window');

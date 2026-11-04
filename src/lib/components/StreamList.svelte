@@ -159,7 +159,11 @@
           tabindex="0"
           title={d.full}
           onclick={() => start(s)}
-          onkeydown={(e) => e.key === 'Enter' && start(s)}
+          onkeydown={(e) => {
+            if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+            e.preventDefault();
+            start(s);
+          }}
         >
           <div class="q" class:uhd={q === '4K'} class:fhd={q === '1080p'} class:low={q === 'CAM' || (q === '?' && !web)}>{web ? 'Link' : q === '?' ? '—' : q}</div>
           <div class="body">
@@ -279,7 +283,7 @@
     background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg-3) 95%, transparent) 30%);
     opacity: 0; transition: opacity var(--dur);
   }
-  .stream:hover .actions, .stream:focus-visible .actions { opacity: 1; pointer-events: auto; }
+  .stream:hover .actions, .stream:focus-visible .actions, .stream:focus-within .actions { opacity: 1; pointer-events: auto; }
   .actions .icon-btn { width: 32px; height: 32px; }
   .play {
     width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent);

@@ -100,7 +100,7 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
       const extra = await getSubtitles(ctx.addons, ctx.type, ctx.videoId);
       subtitles = subtitles.concat(
         extra
-          .filter((s) => langs.includes(s.lang.toLowerCase()))
+          .filter((s) => s?.url && langs.includes((s.lang ?? '').toLowerCase()))
           .slice(0, 6)
           .map((s) => s.url),
       );

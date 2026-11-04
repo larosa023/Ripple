@@ -1,6 +1,8 @@
 <script lang="ts">
   // New episodes for the shows in your library: what just came out, and what's coming.
   import Icon from '../lib/components/Icon.svelte';
+  import { untrack } from 'svelte';
+  import { airDate } from '../lib/dates';
   import { getMeta } from '../lib/stremio/client';
   import { backdropOf } from '../lib/stremio/images';
   import type { MetaDetail, MetaPreview, Video } from '../lib/stremio/types';
@@ -29,8 +31,13 @@
     return [...seen.values()];
   });
 
+  // Refetch only when the set of shows changes, not every time something is played.
+  const followedKey = $derived(followed.map((m) => m.id).sort().join(','));
+
+
   $effect(() => {
-    const list = followed;
+    void followedKey;
+    const list = untrack(() => followed);
     let live = true;
     loading = true;
     loaded = 0;
@@ -44,7 +51,7 @@
           const meta = await getMeta(enabledAddons(), m.type, m.id);
           for (const v of meta.videos ?? []) {
             if (!v.released || (v.season ?? 0) === 0) continue;
-            const d = new Date(v.released);
+            const d = airDate(v.released);
             if (+d >= from && +d <= to) found.push({ show: meta, video: v, date: d });
           }
         } catch {

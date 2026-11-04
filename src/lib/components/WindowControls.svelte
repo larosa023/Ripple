@@ -9,15 +9,21 @@
   onMount(() => {
     if (!isTauri) return;
     let unlisten: (() => void) | undefined;
+    let gone = false;
     import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
       const w = getCurrentWindow();
       win = w;
       maximized = await w.isMaximized();
-      unlisten = await w.onResized(async () => {
+      const off = await w.onResized(async () => {
         maximized = await w.isMaximized();
       });
+      if (gone) off(); // unmounted while we were setting up (e.g. nav layout changed)
+      else unlisten = off;
     });
-    return () => unlisten?.();
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
   });
 </script>
 

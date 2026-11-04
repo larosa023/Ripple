@@ -6,6 +6,7 @@
   import { addons } from '../lib/stores/addons.svelte';
   import { go, router } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
+  import { tick, untrack } from 'svelte';
 
   const usable = $derived(
     addons.list.filter((a) => a.enabled && !(settings.hideAdultAddons && a.manifest.behaviorHints?.adult)),
@@ -17,7 +18,7 @@
       a.manifest.catalogs
         .filter((c) => isBoardCatalog(c) || catalogExtras(c).every((e) => !e.isRequired || (e.name === 'genre' && e.options?.length)))
         .map((c) => ({ addon: a, catalog: c })),
-    ),
+    ).filter((c, i, all) => all.findIndex((x) => x.addon.manifest.id === c.addon.manifest.id && x.catalog.type === c.catalog.type && x.catalog.id === c.catalog.id) === i),
   );
   const types = $derived([...new Set(catalogs.map((c) => c.catalog.type))]);
 
@@ -36,6 +37,7 @@
   let error = $state('');
   let hasMore = $state(true);
   let token = 0;
+  let pageEl: HTMLDivElement | undefined = $state();
 
   function setQuery(patch: Record<string, string>) {
     const next: Record<string, string> = {
@@ -65,6 +67,9 @@
       const fresh = page.filter((m) => !seen.has(m.id));
       items = reset ? fresh : [...items, ...fresh];
       hasMore = canSkip && fresh.length > 0;
+      // If the page doesn't fill the window there's nothing to scroll, so fetch the next page now.
+      await tick();
+      if (my === token && hasMore && pageEl && pageEl.scrollHeight - pageEl.clientHeight < 600) setTimeout(() => my === token && !loading && loadPage(false), 0);
     } catch (e) {
       if (my === token) error = (e as Error).message;
     } finally {
@@ -72,12 +77,15 @@
     }
   }
 
+  // Reload only when the selection itself changes (by id), not when addon manifests refresh.
+  const selectionKey = $derived(`${selected?.addon.manifest.id}|${selected?.catalog.id}|${type}|${genre}`);
   $effect(() => {
-    // re-run whenever the selection changes
-    void [selected?.addon.manifest.id, selected?.catalog.id, type, genre];
-    items = [];
-    hasMore = true;
-    loadPage(true);
+    void selectionKey;
+    untrack(() => {
+      items = [];
+      hasMore = true;
+      loadPage(true);
+    });
   });
 
   function onScroll(e: Event) {
@@ -86,7 +94,7 @@
   }
 </script>
 
-<div class="page" onscroll={onScroll}>
+<div class="page" onscroll={onScroll} bind:this={pageEl}>
   <h1 class="page-title">Discover</h1>
   <div class="filters">
     <div class="tabs">

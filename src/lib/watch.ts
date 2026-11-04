@@ -1,6 +1,7 @@
 // Starting streams, choosing the next episode's source, and remembering what
 // you picked per show.
 import { getStreams } from './stremio/client';
+import { airDate } from './dates';
 import { describe, filterAndSort, quality } from './stremio/streams';
 import type { MetaDetail, SourcedStream, Video } from './stremio/types';
 import { isTauri } from './stremio/http';
@@ -29,7 +30,7 @@ export function epLabel(v: Video): string {
   return [epCode(v), v.title ?? v.name ?? ''].filter(Boolean).join(' · ');
 }
 
-const unreleased = (v: Video) => !!v.released && new Date(v.released) > new Date();
+const unreleased = (v: Video) => !!v.released && airDate(v.released) > new Date();
 const byOrder = (a: Video, b: Video) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? a.number ?? 0) - (b.episode ?? b.number ?? 0);
 
 /** The released episode after `videoId`, skipping specials (season 0). */

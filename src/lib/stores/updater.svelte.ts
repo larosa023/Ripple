@@ -46,7 +46,10 @@ export async function installUpdate(): Promise<void> {
     // Downloads, starts the installer, and closes Ripple; it reopens when done.
     await invoke('install_update', { url: updater.info.downloadUrl });
   } catch (e) {
-    updater.status = 'error';
+    // Keep the banner so "Update" can be tried again, and say what went wrong.
+    updater.status = 'available';
     updater.error = String(e);
+    const { toast } = await import('./toast.svelte');
+    toast(`Update failed: ${String(e).replace(/^Error:\s*/, '')}`, 'error', 9000);
   }
 }

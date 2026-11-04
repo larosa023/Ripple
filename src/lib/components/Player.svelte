@@ -41,6 +41,20 @@
   let scrubbing = $state(false);
   let bar: HTMLDivElement | undefined = $state();
   let flash = $state<'' | 'play' | 'pause' | 'back' | 'fwd'>('');
+  let help = $state(false);
+  let volPill = $state(false);
+  let volTimer: ReturnType<typeof setTimeout> | undefined;
+  function showVol() {
+    volPill = true;
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => (volPill = false), 900);
+  }
+  function onWheel(e: WheelEvent) {
+    // Scroll over the video to change volume.
+    e.preventDefault();
+    setVolume(playback.volume + (e.deltaY < 0 ? 5 : -5));
+    showVol();
+  }
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ---------- skip intro / recap ----------
@@ -118,6 +132,18 @@
   $effect(() => {
     void [settings.subFont, settings.subScale, settings.subColor, settings.subStyle, settings.subPos, settings.subBold, settings.subOverride];
     if (playback.loaded) applySubStyle();
+  });
+
+  // Mouse Back button closes the full-size player instead of navigating behind it.
+  $effect(() => {
+    const onMouseNav = (e: Event) => {
+      if (!playback.active || playback.mini || (e as CustomEvent).detail !== 'back') return;
+      e.preventDefault();
+      if (playback.fullscreen) setFullscreen(false);
+      else closePlayer();
+    };
+    window.addEventListener('ripple:mouse-nav', onMouseNav);
+    return () => window.removeEventListener('ripple:mouse-nav', onMouseNav);
   });
 
   // ---------- mini player ----------
@@ -216,9 +242,14 @@
     } else if (k === 'ArrowUp') {
       handled();
       setVolume(playback.volume + 5);
+      showVol();
     } else if (k === 'ArrowDown') {
       handled();
       setVolume(playback.volume - 5);
+      showVol();
+    } else if (k === '?' || (k === '/' && e.shiftKey)) {
+      handled();
+      help = !help;
     } else if (k === 'm' || k === 'M') {
       handled();
       toggleMute();
@@ -239,7 +270,8 @@
       setSubDelay(playback.subDelay + (k.toLowerCase() === 'x' ? 0.1 : -0.1));
     } else if (k === 'Escape') {
       handled();
-      if (menu) menu = '';
+      if (help) help = false;
+      else if (menu) menu = '';
       else if (playback.fullscreen) setFullscreen(false);
       else closePlayer();
     } else if (k === '[' || k === ']') {
@@ -310,7 +342,27 @@
       <div class="mini-bar"><div style:width="{progress}%"></div></div>
     {:else}
     <!-- Clicks on the video toggle pause; double-click toggles fullscreen. -->
-    <div class="surface" role="presentation" onclick={onSurfaceClick} ondblclick={onSurfaceDbl}></div>
+    <div class="surface" role="presentation" onclick={onSurfaceClick} ondblclick={onSurfaceDbl} onwheel={onWheel}></div>
+
+    {#if volPill}
+      <div class="volpill" aria-hidden="true"><Icon name={volIcon} size={18} /><div class="vbar"><i style:width="{Math.min(100, (playback.volume / 130) * 100)}%"></i></div><b>{playback.muted ? 'Muted' : `${Math.round(playback.volume)}%`}</b></div>
+    {/if}
+
+    {#if help}
+      <div class="help" role="dialog" aria-label="Keyboard shortcuts">
+        <div class="hh">Keyboard shortcuts <button class="ctl s" onclick={() => (help = false)} aria-label="Close"><Icon name="x" size={16} /></button></div>
+        <dl>
+          {#each [
+            ['Space / K', 'Play / pause'], ['← / →', 'Back / forward 5s'], ['J / L', 'Back / forward 10s'], ['↑ / ↓ or scroll', 'Volume'],
+            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
+            ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'], ['Shift + N', 'Next episode'],
+            ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
+          ] as [k, d] (k)}
+            <dt>{k}</dt><dd>{d}</dd>
+          {/each}
+        </dl>
+      </div>
+    {/if}
 
     <header class="top" data-tauri-drag-region={playback.fullscreen ? undefined : true}>
       <button class="ctl" onclick={() => closePlayer()} aria-label="Back" title="Back (Esc)"><Icon name="back" size={22} /></button>
@@ -429,7 +481,9 @@
           />
         </div>
 
-        <div class="time">{fmtTime(playback.time)} <span>/ {fmtTime(playback.duration)}</span></div>
+        <button class="time" onclick={() => (settings.showRemaining = !settings.showRemaining)} title="Show {settings.showRemaining ? 'total length' : 'time remaining'}">
+          {fmtTime(playback.time)} <span>/ {settings.showRemaining ? `-${fmtTime(Math.max(0, playback.duration - playback.time))}` : fmtTime(playback.duration)}</span>
+        </button>
 
         <div class="spacer"></div>
 
@@ -552,6 +606,23 @@
   .ctl:disabled { opacity: 0.35; cursor: default; background: none; }
   .ctl.big { width: 46px; height: 46px; }
   .badge { position: absolute; bottom: 2px; right: 0; font-size: 9.5px; padding: 0 3px; border-radius: 4px; background: var(--accent); color: var(--on-accent); }
+  .time { border: 0; background: none; color: #fff; cursor: pointer; padding: 6px 8px; border-radius: 8px; font-family: inherit; }
+  .time:hover { background: rgb(255 255 255 / 0.1); }
+  .volpill {
+    position: absolute; top: 70px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 999px; background: rgb(12 12 16 / 0.8); font-size: 13px; font-variant-numeric: tabular-nums; pointer-events: none;
+  }
+  .vbar { width: 120px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.25); overflow: hidden; }
+  .vbar i { display: block; height: 100%; background: var(--accent); }
+  .volpill b { min-width: 44px; text-align: right; }
+  .help {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: min(460px, calc(100% - 40px));
+    padding: 16px 18px; border-radius: 16px; background: rgb(14 14 18 / 0.94); border: 1px solid rgb(255 255 255 / 0.12); box-shadow: 0 24px 60px rgb(0 0 0 / 0.6);
+  }
+  .hh { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 15px; margin-bottom: 10px; }
+  .help dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 18px; margin: 0; font-size: 13px; }
+  .help dt { font-weight: 700; color: #fff; white-space: nowrap; }
+  .help dd { margin: 0; color: rgb(255 255 255 / 0.72); }
   .time { margin-left: 8px; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .time span { color: rgb(255 255 255 / 0.6); font-weight: 500; }
 

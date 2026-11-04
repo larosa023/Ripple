@@ -4,8 +4,9 @@
   import Nav from './lib/components/Nav.svelte';
   import Studio from './lib/components/Studio.svelte';
   import Player from './lib/components/Player.svelte';
-  import { playback } from './lib/stores/playback.svelte';
+  import { playback, setFullscreen } from './lib/stores/playback.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import ContextMenu from './lib/components/ContextMenu.svelte';
   import TitleBar from './lib/components/TitleBar.svelte';
   import { isTauri } from './lib/stremio/http';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
@@ -33,7 +34,8 @@
     applyLook($state.snapshot(look) as typeof look);
   });
 
-  $effect(() => setRequestTimeout(settings.requestTimeoutSec * 1000));
+  // Clamped: an empty or zero field must never turn into a 0 ms timeout that fails every request.
+  $effect(() => setRequestTimeout(Math.min(60, Math.max(3, Number(settings.requestTimeoutSec) || 12)) * 1000));
 
   // Ripple draws its own themed title bar unless the user picks the standard Windows one.
   const customChrome = $derived(isTauri && !settings.nativeTitleBar);
@@ -62,10 +64,16 @@
 
   function onKey(e: KeyboardEvent) {
     if (playback.active && !playback.mini) return; // the player handles its own keys
+    // Esc leaves window fullscreen (entered from a title page) when nothing else wants Esc.
+    if (e.key === 'Escape' && playback.fullscreen && !e.defaultPrevented) {
+      void setFullscreen(false, false);
+      return;
+    }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName);
     if ((e.ctrlKey && e.key.toLowerCase() === 'k') || (!typing && e.key === '/')) {
       e.preventDefault();
-      go('search');
+      if (router.route.name === 'search') window.dispatchEvent(new Event('ripple:focus-search'));
+      else go('search');
     } else if (!typing && e.altKey && e.key === 'ArrowLeft') {
       history.back();
     }
@@ -90,6 +98,7 @@
 <Studio />
 <Player />
 <Toasts />
+<ContextMenu />
 
 <style>
   .shell { position: relative; z-index: 1; display: flex; height: 100%; }

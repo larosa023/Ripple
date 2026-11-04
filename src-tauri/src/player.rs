@@ -360,6 +360,10 @@ fn launch(req: PlayRequest) -> Result<(), String> {
         if let Some(sub) = req.subtitles.first() {
             cmd.arg(format!("--input-slave={sub}"));
         }
+        // VLC only takes these two headers; Referer is the one streams most often need besides User-Agent.
+        if let Some((_, r)) = req.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("referer")) {
+            cmd.arg(format!("--http-referrer={r}"));
+        }
         if let Some((_, ua)) = req.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("user-agent")) {
             cmd.arg(format!("--http-user-agent={ua}"));
         }

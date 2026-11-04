@@ -6,7 +6,9 @@
   import type { MetaDetail, Video } from '../lib/stremio/types';
   import { openExternal } from '../lib/player';
   import { enabledAddons } from '../lib/stores/addons.svelte';
-  import { isSaved, isWatched, library, resumePoint, toggleSaved, toggleWatched } from '../lib/stores/library.svelte';
+  import { isSaved, isWatched, library, resumePoint, setWatched, toggleSaved, toggleWatched } from '../lib/stores/library.svelte';
+  import { openMenu } from '../lib/stores/ui.svelte';
+  import { airDate } from '../lib/dates';
   import { fmtTime, playback, setFullscreen } from '../lib/stores/playback.svelte';
   import { back, router } from '../lib/stores/router.svelte';
   import { isTauri } from '../lib/stremio/http';
@@ -27,7 +29,6 @@
   let season = $state<number | null>(null);
   let selected = $state<{ videoId: string; label: string; episode?: Video } | null>(null);
   let moreOpen = $state(false);
-  let fullscreen = $state(false);
 
   $effect(() => {
     const t = type;
@@ -82,10 +83,10 @@
   const DATE_FMT = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   function fmtDate(d?: string) {
     if (!d) return '';
-    const dt = new Date(d);
+    const dt = airDate(d);
     return isNaN(+dt) ? '' : DATE_FMT.format(dt);
   }
-  const unreleased = (v: Video) => !!v.released && new Date(v.released) > new Date();
+  const unreleased = (v: Video) => !!v.released && airDate(v.released) > new Date();
   const byOrder = (a: Video, b: Video) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? a.number ?? 0) - (b.episode ?? b.number ?? 0);
 
   /** What Play does: resume the last episode/position, else start from the beginning. */
@@ -110,6 +111,29 @@
     return { videoId: target.id, label: epLabel(target), episode: target, text: `${verb} ${epCode(target)}`.trim() };
   });
 
+  /** Released episodes in the current season. */
+  const seasonReleased = $derived(episodes.filter((v) => !unreleased(v)));
+  const seasonDone = $derived(seasonReleased.length > 0 && seasonReleased.every((v) => isWatched(v.id)));
+
+  function epMenu(e: MouseEvent, v: Video) {
+    const ordered = videos.filter((x) => (x.season ?? 0) > 0 && !unreleased(x)).sort(byOrder);
+    const upTo = ordered.slice(0, ordered.indexOf(v) + 1).map((x) => x.id);
+    openMenu(
+      e,
+      [
+        { label: 'Play', icon: 'play', run: () => openSources({ videoId: v.id, label: epLabel(v), episode: v }) },
+        { label: isWatched(v.id) ? 'Mark unwatched' : 'Mark watched', icon: 'eye', run: () => toggleWatched(v.id) },
+        ...((v.season ?? 0) > 0 && upTo.length > 1 ? [{ label: `Mark watched up to ${epCode(v)}`, icon: 'check', run: () => setWatched(upTo, true) }] : []),
+        {
+          label: seasonDone ? `Mark ${season === 0 ? 'specials' : `season ${season}`} unwatched` : `Mark ${season === 0 ? 'specials' : `season ${season}`} watched`,
+          icon: 'list',
+          run: () => setWatched(seasonReleased.map((x) => x.id), !seasonDone),
+        },
+      ],
+      epLabel(v),
+    );
+  }
+
   function openSources(t: { videoId: string; label: string; episode?: Video }) {
     selected = { videoId: t.videoId, label: t.label, episode: t.episode };
   }
@@ -117,7 +141,7 @@
   const trailers = $derived.by(() => {
     const out: { id: string; title: string }[] = [];
     for (const t of meta?.trailerStreams ?? []) {
-      if (t.ytId) out.push({ id: t.ytId, title: t.title?.replace(meta?.name ?? '', '').trim() || 'Trailer' });
+      if (t.ytId && !out.some((o) => o.id === t.ytId)) out.push({ id: t.ytId, title: t.title?.replace(meta?.name ?? '', '').trim() || 'Trailer' });
     }
     for (const t of meta?.trailers ?? []) {
       if (t.source && !out.some((o) => o.id === t.source)) out.push({ id: t.source, title: t.type || 'Trailer' });
@@ -201,9 +225,7 @@
 
   // Fullscreen for the whole app window, like Nuvio's top-right toggle.
   async function toggleWindowFullscreen() {
-    fullscreen = !fullscreen;
-    await setFullscreen(fullscreen);
-    playback.fullscreen = false; // the player tracks its own fullscreen state
+    await setFullscreen(!playback.fullscreen, false);
   }
 </script>
 
@@ -220,7 +242,7 @@
       <button class="circle" onclick={back} aria-label="Back" title="Back"><Icon name="back" size={20} /></button>
       {#if isTauri}
         <button class="circle" onclick={toggleWindowFullscreen} aria-label="Fullscreen" title="Fullscreen">
-          <Icon name={fullscreen ? 'shrink' : 'expand'} size={18} />
+          <Icon name={playback.fullscreen ? 'shrink' : 'expand'} size={18} />
         </button>
       {/if}
     </div>
@@ -294,6 +316,11 @@
                 {#each seasons as s (s)}<option value={s}>{s === 0 ? 'Specials' : `Season ${s}`}</option>{/each}
               </select>
             {/if}
+            {#if (epView === 'list' || !ratings) && seasonReleased.length}
+              <button class="btn sm ghost season-mark" onclick={() => setWatched(seasonReleased.map((x) => x.id), !seasonDone)} title="Right-click an episode for more options">
+                <Icon name={seasonDone ? 'eye' : 'check'} size={14} />{seasonDone ? 'Mark season unwatched' : 'Mark season watched'}
+              </button>
+            {/if}
           </div>
           {#if epView === 'ratings' && ratings}
             <div class="heat-wrap" use:dragScroll>
@@ -338,16 +365,25 @@
                 role="button"
                 tabindex="0"
                 onclick={() => openSources({ videoId: v.id, label: epLabel(v), episode: v })}
-                onkeydown={(e) => e.key === 'Enter' && openSources({ videoId: v.id, label: epLabel(v), episode: v })}
+                onkeydown={(e) => {
+                  // Only the row itself: Enter on the watched button inside it shouldn't open sources.
+                  if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                  e.preventDefault();
+                  openSources({ videoId: v.id, label: epLabel(v), episode: v });
+                }}
+                oncontextmenu={(e) => epMenu(e, v)}
               >
                 <div class="thumb">
                   {#if v.thumbnail}<img src={v.thumbnail} alt="" loading="lazy" />{/if}
                   <span class="epn">{v.episode ?? v.number ?? ''}</span>
-                  {#if rp}<span class="bar"><i style:width="{(rp.t / rp.d) * 100}%"></i></span>{/if}
+                  {#if rp && rp.d > 0}<span class="bar"><i style:width="{Math.min(100, (rp.t / rp.d) * 100)}%"></i></span>{/if}
                   <span class="hover-play"><Icon name="play" size={16} fill /></span>
                 </div>
                 <div class="ep-body">
-                  <div class="ep-title">{v.title ?? v.name ?? `Episode ${v.episode ?? ''}`}</div>
+                  <div class="ep-title">
+                    {#if playTarget?.videoId === v.id && library.history.some((h) => h.meta.id === meta?.id)}<span class="upnext">{resumePoint(v.id) ? 'Resume' : 'Up next'}</span>{/if}
+                    {v.title ?? v.name ?? `Episode ${v.episode ?? ''}`}
+                  </div>
                   <div class="ep-date">{unreleased(v) ? 'Airs ' : ''}{fmtDate(v.released)}</div>
                   {#if v.overview ?? v.description}<div class="ep-desc">{v.overview ?? v.description}</div>{/if}
                 </div>
@@ -561,6 +597,11 @@
   .ep:hover .hover-play { opacity: 1; }
   .ep-body { flex: 1; min-width: 0; }
   .ep-title { font-weight: 700; font-size: 15px; }
+  .upnext {
+    display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 5px; vertical-align: 1px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; background: var(--accent); color: var(--on-accent);
+  }
+  .season-mark { margin-left: auto; }
   .ep-date { font-size: 12.5px; color: var(--text-3); margin-top: 1px; }
   .ep-desc { font-size: 13px; color: var(--text-2); margin-top: 5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .seen.on { color: var(--ok); }

@@ -128,8 +128,21 @@ export function getCatalog(
 ): Promise<MetaPreview[]> {
   const url = resourceUrl(addon, 'catalog', type, id, extra);
   return cached(url, 10 * 60_000, () =>
-    getJson<{ metas?: MetaPreview[] }>(url, requestTimeout).then((r) => r.metas ?? []),
+    getJson<{ metas?: MetaPreview[] }>(url, requestTimeout).then((r) =>
+      uniqueBy((Array.isArray(r.metas) ? r.metas : []).filter((m) => m && typeof m.id === 'string' && m.id), (m) => m.id),
+    ),
   );
+}
+
+/** Addons sometimes repeat items; lists are keyed by id, so drop repeats where data comes in. */
+export function uniqueBy<T>(list: T[], key: (x: T) => string): T[] {
+  const seen = new Set<string>();
+  return list.filter((x) => {
+    const k = key(x);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 /** First enabled addon that can resolve the meta wins (addon order = priority). */
@@ -142,7 +155,9 @@ export async function getMeta(addons: InstalledAddon[], type: string, id: string
       const meta = await cached(url, 30 * 60_000, () =>
         getJson<{ meta?: MetaDetail }>(url, requestTimeout).then((r) => {
           if (!r.meta) throw new Error('Empty meta');
-          return r.meta;
+          const m = r.meta;
+          if (Array.isArray(m.videos)) m.videos = uniqueBy(m.videos.filter((v) => v && typeof v.id === 'string'), (v) => v.id);
+          return m;
         }),
       );
       return meta;

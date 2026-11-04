@@ -46,6 +46,8 @@ export interface Settings {
   rememberPerShow: boolean;
   /** Offer a corner mini player while you browse. */
   miniPlayer: boolean;
+  /** Player clock shows time remaining instead of total length. */
+  showRemaining: boolean;
   // Subtitle look
   subFont: string;
   subScale: number;
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   skipIntro: 'button',
   rememberPerShow: true,
   miniPlayer: true,
+  showRemaining: false,
   subFont: '',
   subScale: 1,
   subColor: '#ffffff',

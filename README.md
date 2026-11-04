@@ -34,10 +34,11 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Calendar** of new and upcoming episodes for the shows in your library.
 - **Integrations**: TMDB (cast photos, episode ratings), a Series Graph-style ratings heatmap on every show, Letterboxd (film links, diary import, CSV export), and an optional Discord "Watching" status.
 - **Or an external player** (mpv, VLC, or any player you choose) if you prefer.
-- **Library**: saved titles, watch history, watched episodes.
+- **Library**: saved titles, watch history, watched episodes. Right-click any poster for quick actions (add to library, mark watched, remove from Continue watching, open on IMDb or Letterboxd); right-click an episode to mark everything up to it, or a whole season, as watched.
+- **Feels like a desktop app**: reopens at the same size and position, opening it again focuses the running window, Back returns you to where you were scrolled, and mouse Back/Forward buttons work everywhere (Back also closes the player).
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
-- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `Esc` back.
+- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `?` all shortcuts, scroll wheel for volume, click the clock for time remaining, `Esc` back.
 
 ## Install
 

@@ -41,6 +41,9 @@ pub struct UpdateInfo {
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        // A stalled connection gives up instead of leaving "Downloading…" up forever.
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())
 }

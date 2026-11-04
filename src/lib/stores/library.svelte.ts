@@ -73,6 +73,18 @@ export function toggleWatched(videoId: string) {
   else library.watched.push(videoId);
 }
 
+/** Marks many videos at once (a season, or everything up to an episode). */
+export function setWatched(ids: string[], on: boolean) {
+  if (on) {
+    const have = new Set(library.watched);
+    library.watched.push(...ids.filter((id) => !have.has(id)));
+    for (const id of ids) delete library.progress?.[id];
+  } else {
+    const drop = new Set(ids);
+    library.watched = library.watched.filter((v) => !drop.has(v));
+  }
+}
+
 export function removeFromHistory(id: string) {
   library.history = library.history.filter((h) => h.meta.id !== id);
 }

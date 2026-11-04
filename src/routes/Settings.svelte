@@ -491,7 +491,7 @@
           <div class="group">
             <SettingRow title="Addon timeout" description="How long to wait for a slow addon before giving up.">
               <div class="num">
-                <input class="input" type="number" min="3" max="60" bind:value={settings.requestTimeoutSec} />
+                <input class="input" type="number" min="3" max="60" bind:value={settings.requestTimeoutSec} onchange={() => (settings.requestTimeoutSec = Math.min(60, Math.max(3, Math.round(Number(settings.requestTimeoutSec) || 12))))} />
                 <span class="muted">sec</span>
               </div>
             </SettingRow>

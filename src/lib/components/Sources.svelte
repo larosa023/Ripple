@@ -18,8 +18,19 @@
   let logoFailed = $state(false);
   const art = $derived(episode?.thumbnail || backdropOf(meta, 'large'));
 
+  // Mouse Back closes the source list (like Esc) instead of leaving the title page.
+  $effect(() => {
+    const onMouseNav = (e: Event) => {
+      if ((playback.active && !playback.mini) || (e as CustomEvent).detail !== 'back') return;
+      e.preventDefault();
+      onclose();
+    };
+    window.addEventListener('ripple:mouse-nav', onMouseNav);
+    return () => window.removeEventListener('ripple:mouse-nav', onMouseNav);
+  });
+
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && !playback.active) {
+    if (e.key === 'Escape' && !(playback.active && !playback.mini)) {
       e.preventDefault();
       onclose();
     }
