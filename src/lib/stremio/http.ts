@@ -40,14 +40,19 @@ export async function getJson<T>(url: string, timeoutMs = 12000, init: RequestIn
   }
 }
 
-export async function getText(url: string, timeoutMs = 12000): Promise<string> {
+export async function getText(url: string, timeoutMs = 12000, headers?: Record<string, string>): Promise<string> {
+  const buf = await getBytes(url, timeoutMs, headers);
+  return new TextDecoder().decode(buf);
+}
+
+export async function getBytes(url: string, timeoutMs = 12000, headers?: Record<string, string>): Promise<ArrayBuffer> {
   const f = await getFetch();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await f(url, { signal: ctrl.signal });
+    const res = await f(url, { signal: ctrl.signal, headers });
     if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`);
-    return await res.text();
+    return await res.arrayBuffer();
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw new Error('Timed out');
     throw e;

@@ -183,6 +183,7 @@
                 <option value="home">Home</option>
                 <option value="discover">Discover</option>
                 <option value="library">Library</option>
+                <option value="live">Live TV</option>
               </select>
             </SettingRow>
             <SettingRow title="Windows title bar" description="Use the standard Windows title bar instead of Ripple's themed one. Turn on if you want Windows 11 snap layouts on the maximize button.">

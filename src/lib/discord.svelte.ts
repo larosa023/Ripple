@@ -1,6 +1,7 @@
 // Keeps your Discord activity in step with the player (when turned on).
 import { invoke } from './player';
 import { isTauri } from './stremio/http';
+import { nowNext } from './iptv/live.svelte';
 import { playback } from './stores/playback.svelte';
 import { settings } from './stores/settings.svelte';
 
@@ -9,7 +10,22 @@ let lastSent = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let warned = false;
 
+function liveActivity() {
+  const ch = playback.live!;
+  const logo = ch.logo.startsWith('https://') ? ch.logo : undefined;
+  const a: Record<string, unknown> = {
+    type: 3,
+    details: ch.name.slice(0, 128) || 'Live TV',
+    state: (playback.paused ? [playback.subtitle, 'Paused'].filter(Boolean).join(' · ') : playback.subtitle || 'Live TV').slice(0, 128),
+    assets: logo ? { large_image: logo, large_text: ch.name.slice(0, 128) } : undefined,
+  };
+  const on = nowNext(ch.id).now;
+  if (on && !playback.paused) a.timestamps = { start: on.s, end: on.e };
+  return a;
+}
+
 function activity() {
+  if (playback.active && playback.live) return liveActivity();
   if (!playback.active || !playback.meta) return null;
   const poster = playback.meta.poster?.startsWith('https://') ? playback.meta.poster : undefined;
   const a: Record<string, unknown> = {
@@ -51,7 +67,7 @@ export function startDiscordSync() {
   $effect.root(() => {
     $effect(() => {
       // Touch what matters so the effect re-runs on changes.
-      void [settings.discord, settings.discordAppId, playback.active, playback.ready, playback.paused, playback.videoId, playback.title, playback.subtitle, playback.duration];
+      void [settings.discord, settings.discordAppId, playback.active, playback.live, playback.ready, playback.paused, playback.videoId, playback.title, playback.subtitle, playback.duration];
       void Math.round(playback.time / 15);
       clearTimeout(timer);
       if (!settings.discord && lastKey === 'none') return;

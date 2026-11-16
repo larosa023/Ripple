@@ -18,6 +18,7 @@
   import { applyLook, look } from './lib/theme/look.svelte';
   import { startDiscordSync } from './lib/discord.svelte';
   import Calendar from './routes/Calendar.svelte';
+  import Live from './routes/Live.svelte';
   import Addons from './routes/Addons.svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -26,7 +27,7 @@
   import Search from './routes/Search.svelte';
   import Settings from './routes/Settings.svelte';
 
-  const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, calendar: Calendar, addons: Addons, settings: Settings };
+  const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, live: Live, calendar: Calendar, addons: Addons, settings: Settings };
   const Page = $derived(pages[router.route.name]);
 
   // Apply the whole look (colors, fonts, layout attributes, custom CSS) whenever any part changes.

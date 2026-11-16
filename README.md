@@ -31,6 +31,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
 - **Subtitle styling**: font, size, color, outline / shadow / box, position, and a sync offset (`Z`/`X`) in the player.
 - **Mini player** (optional): shrink the video to a corner and keep browsing.
+- **Live TV** from M3U / M3U8 playlists: add one by link, from a file, or with an Xtream Codes login. Channels are grouped like your provider groups them, with search, favorites, recently watched, and hideable groups. Add an XMLTV guide (`.xml` or `.xml.gz`, picked up automatically when the playlist names one) to see what's on now and next. Channel-specific user agents and referrers (`#EXTVLCOPT`, `#EXTHTTP`, `url|User-Agent=…`) are honored. In the player: `Page Up`/`Page Down` to flip channels, `G` for the channel list, and a Go live button after pausing. Link playlists refresh every 12 hours.
 - **Calendar** of new and upcoming episodes for the shows in your library.
 - **Integrations**: TMDB (cast photos, episode ratings), a Series Graph-style ratings heatmap on every show, Letterboxd (film links, diary import, CSV export), and an optional Discord "Watching" status.
 - **Or an external player** (mpv, VLC, or any player you choose) if you prefer.
@@ -72,8 +73,9 @@ src/
   lib/stremio/    addon protocol client, account import, stream parsing/sorting
   lib/stores/     settings, addons, library, router (persisted, Svelte 5 runes)
   lib/theme/      look store, presets, fonts, theme files
+  lib/iptv/       M3U and XMLTV parsing, Live TV playlists, channel playback
   lib/components/ nav, hero, posters, catalog rows, stream list, Customize studio
-  routes/         Home, Discover, Search, Detail, Library, Addons, Settings
+  routes/         Home, Discover, Search, Detail, Library, Live TV, Calendar, Addons, Settings
 src-tauri/        Rust shell: HTTP (no CORS), embedded mpv (--wid + JSON IPC), external player launcher, updater
 ```
 

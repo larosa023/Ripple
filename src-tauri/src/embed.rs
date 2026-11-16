@@ -99,6 +99,32 @@ pub struct EmbedRequest {
     /// Preferred subtitle/audio languages, e.g. "eng,spa".
     pub sub_langs: Option<String>,
     pub volume: Option<f64>,
+    /// A live TV channel: reconnect when the stream drops instead of stopping.
+    #[serde(default)]
+    pub live: bool,
+}
+
+/// mpv options for request headers. User-Agent and Referer have their own options; ffmpeg would
+/// otherwise send its default user agent alongside ours, which some IPTV providers reject.
+fn header_args(headers: &[(String, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = Vec::new();
+    for (k, v) in headers {
+        if v.contains('\n') || v.contains('\r') {
+            continue;
+        }
+        if k.eq_ignore_ascii_case("user-agent") {
+            out.push(format!("--user-agent={v}"));
+        } else if k.eq_ignore_ascii_case("referer") || k.eq_ignore_ascii_case("referrer") {
+            out.push(format!("--referrer={v}"));
+        } else {
+            rest.push(format!("{k}: {}", v.replace(',', "\\,")));
+        }
+    }
+    if !rest.is_empty() {
+        out.push(format!("--http-header-fields={}", rest.join(",")));
+    }
+    out
 }
 
 /// Prefix the UI looks for to offer installing mpv.
@@ -204,14 +230,12 @@ fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64)
     for sub in &req.subtitles {
         args.push(format!("--sub-file={sub}"));
     }
-    if !req.headers.is_empty() {
-        let joined = req
-            .headers
-            .iter()
-            .map(|(k, v)| format!("{k}: {}", v.replace(',', "\\,")))
-            .collect::<Vec<_>>()
-            .join(",");
-        args.push(format!("--http-header-fields={joined}"));
+    args.extend(header_args(&req.headers));
+    if req.live {
+        // Live streams hiccup: let ffmpeg reconnect rather than ending playback.
+        args.push("--stream-lavf-o-append=reconnect=1".into());
+        args.push("--stream-lavf-o-append=reconnect_streamed=1".into());
+        args.push("--stream-lavf-o-append=reconnect_delay_max=5".into());
     }
     args.extend(req.extra_args.iter().cloned());
     args.push("--".into());
@@ -400,10 +424,22 @@ mod tests {
         assert!(pipe_name().contains(&std::process::id().to_string()));
     }
 
+    /// The real-mpv tests share the one global player, so they take turns.
+    static REAL_MPV: StdMutex<()> = StdMutex::new(());
+
+    #[test]
+    fn header_options() {
+        let h = |k: &str, v: &str| (k.to_string(), v.to_string());
+        let args = header_args(&[h("user-agent", "VLC/3"), h("Referer", "https://a/"), h("Origin", "https://b"), h("X-Bad", "a\nb")]);
+        assert_eq!(args, vec!["--user-agent=VLC/3", "--referrer=https://a/", "--http-header-fields=Origin: https://b"]);
+        assert!(header_args(&[]).is_empty());
+    }
+
     /// End-to-end against a real mpv (skipped when mpv or the test video isn't available):
     /// every option Ripple passes is accepted, events stream in, and commands work.
     #[test]
     fn drives_real_mpv() {
+        let _turn = REAL_MPV.lock().unwrap_or_else(|e| e.into_inner());
         let Ok(video) = std::env::var("RIPPLE_TEST_VIDEO") else { return };
         if locate_embeddable_mpv().is_none() {
             return;
@@ -412,12 +448,17 @@ mod tests {
             url: video,
             title: Some("Test — S1E1".into()),
             subtitles: vec![],
-            headers: vec![("User-Agent".into(), "Ripple/1, test".into())],
+            headers: vec![
+                ("User-Agent".into(), "Ripple/1, test".into()),
+                ("Referer".into(), "https://example.com/".into()),
+                ("X-Token".into(), "a,b".into()),
+            ],
             start_seconds: Some(3.0),
             path: None,
             extra_args: vec![],
             sub_langs: Some("eng".into()),
             volume: Some(80.0),
+            live: true,
         };
         let headless = ["--vo=null".to_string(), "--ao=null".to_string()];
         let (conn, session) = spawn_mpv(&req, &headless).expect("mpv should accept every option");
@@ -457,6 +498,9 @@ mod tests {
         assert_eq!(send(json!(["get_property", "aid"])).unwrap(), json!(2));
         assert!(send(json!(["get_property", "no-such-prop"])).is_err());
         assert_eq!(send(json!(["get_property", "media-title"])).unwrap(), json!("Test — S1E1"));
+        assert_eq!(send(json!(["get_property", "user-agent"])).unwrap(), json!("Ripple/1, test"));
+        assert_eq!(send(json!(["get_property", "referrer"])).unwrap(), json!("https://example.com/"));
+        assert_eq!(send(json!(["get_property", "http-header-fields"])).unwrap(), json!(["X-Token: a,b"]));
 
         // Stopping ends the session and the listener.
         shutdown();
@@ -468,6 +512,7 @@ mod tests {
     /// Switching videos (next episode) must not report the old mpv's exit, and must not leave it running.
     #[test]
     fn switching_videos_is_clean() {
+        let _turn = REAL_MPV.lock().unwrap_or_else(|e| e.into_inner());
         let Ok(video) = std::env::var("RIPPLE_TEST_VIDEO") else { return };
         if locate_embeddable_mpv().is_none() {
             return;
@@ -482,6 +527,7 @@ mod tests {
             extra_args: vec![],
             sub_langs: None,
             volume: Some(0.0),
+            live: false,
         };
         let headless = ["--vo=null".to_string(), "--ao=null".to_string()];
         let first_events: Arc<StdMutex<Vec<String>>> = Arc::default();

@@ -2,7 +2,7 @@ import type { Quality, StreamSort } from '../stremio/streams';
 import { load, save } from './persist';
 
 export type PlayerKind = 'mpv' | 'vlc' | 'custom';
-export type StartPage = 'home' | 'discover' | 'library';
+export type StartPage = 'home' | 'discover' | 'library' | 'live';
 
 export type RowDisplay = 'poster' | 'wide' | 'top10';
 

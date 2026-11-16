@@ -10,6 +10,8 @@
   import { settings } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
   import { prefetchNext, playNext } from '../watch';
+  import { goLive, neighbour, playChannel, zap, zapChannels } from '../iptv/play.svelte';
+  import { nowNext, tv } from '../iptv/live.svelte';
   import { SKIP_LABEL, type Segment } from '../skip';
   import {
     applySubStyle,
@@ -36,7 +38,7 @@
 
   let showUi = $state(true);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let menu: '' | 'subs' | 'audio' | 'speed' = $state('');
+  let menu: '' | 'subs' | 'audio' | 'speed' | 'channels' = $state('');
   let hoverX = $state<number | null>(null);
   let scrubbing = $state(false);
   let bar: HTMLDivElement | undefined = $state();
@@ -154,6 +156,31 @@
     return () => window.removeEventListener('resize', onResize);
   });
 
+  // ---------- live TV ----------
+  const live = $derived(playback.live);
+  const onNow = $derived(live ? nowNext(live.id, tv.now) : { now: null, next: null });
+  const liveProgress = $derived(onNow.now ? Math.min(100, ((tv.now - onNow.now.s) / (onNow.now.e - onNow.now.s)) * 100) : 0);
+  const CLOCK = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+  const clock = (t: number) => CLOCK.format(t);
+  const prevCh = $derived(live ? neighbour(-1) : null);
+  const nextCh = $derived(live ? neighbour(1) : null);
+  /** Paused live TV falls behind; this jumps back to what's airing. */
+  let behind = $state(false);
+  $effect(() => {
+    if (live && playback.paused) behind = true;
+  });
+  $effect(() => {
+    void live?.id;
+    behind = false;
+  });
+  let chFilter = $state('');
+  const guideList = $derived.by(() => {
+    if (menu !== 'channels') return [];
+    const q = chFilter.trim().toLowerCase();
+    const all = zapChannels();
+    return (q ? all.filter((c) => c.name.toLowerCase().includes(q)) : all).slice(0, 300);
+  });
+
   const subs = $derived(playback.tracks.filter((t) => t.type === 'sub'));
   const audios = $derived(playback.tracks.filter((t) => t.type === 'audio'));
   const progress = $derived(playback.duration ? (playback.time / playback.duration) * 100 : 0);
@@ -231,6 +258,14 @@
       handled();
       togglePause();
       doFlash(playback.paused ? 'pause' : 'play');
+    } else if (live && (k === 'PageUp' || k === 'PageDown')) {
+      handled();
+      zap(k === 'PageUp' ? -1 : 1);
+    } else if (live && (k === 'g' || k === 'G')) {
+      handled();
+      menu = menu === 'channels' ? '' : 'channels';
+    } else if (live && (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'j' || k === 'J' || k === 'l' || k === 'L' || /^[0-9]$/.test(k) || k === '[' || k === ']')) {
+      handled(); // no seeking or speed changes on live TV
     } else if (k === 'ArrowLeft' || k === 'j' || k === 'J') {
       handled();
       seekBy(k === 'ArrowLeft' && !e.shiftKey ? -5 : -10);
@@ -319,6 +354,8 @@
     <div class="cover" class:gone={playback.ready && !playback.error} aria-hidden="true">
       {#if playback.meta && backdropOf(playback.meta, 'medium')}
         <div class="art" style:background-image={`url("${backdropOf(playback.meta, 'medium')}")`}></div>
+      {:else if live?.logo}
+        <img class="chlogo" src={live.logo} alt="" onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')} />
       {/if}
     </div>
 
@@ -333,13 +370,21 @@
           <button class="ctl s" onclick={() => closePlayer()} title="Close" aria-label="Close"><Icon name="x" size={16} /></button>
         </div>
         <div class="mini-mid">
-          <button class="ctl s" onclick={() => seekBy(-10)} aria-label="Back 10 seconds"><Icon name="back10" size={20} /></button>
+          {#if live}
+            <button class="ctl s" onclick={() => zap(-1)} disabled={!prevCh} aria-label="Previous channel"><Icon name="up" size={20} /></button>
+          {:else}
+            <button class="ctl s" onclick={() => seekBy(-10)} aria-label="Back 10 seconds"><Icon name="back10" size={20} /></button>
+          {/if}
           <button class="ctl big" onclick={() => togglePause()} aria-label={playback.paused ? 'Play' : 'Pause'}><Icon name={playback.paused ? 'play' : 'pause'} size={24} fill /></button>
-          <button class="ctl s" onclick={() => seekBy(10)} aria-label="Forward 10 seconds"><Icon name="fwd10" size={20} /></button>
+          {#if live}
+            <button class="ctl s" onclick={() => zap(1)} disabled={!nextCh} aria-label="Next channel"><Icon name="down" size={20} /></button>
+          {:else}
+            <button class="ctl s" onclick={() => seekBy(10)} aria-label="Forward 10 seconds"><Icon name="fwd10" size={20} /></button>
+          {/if}
         </div>
       </div>
       {#if showNext}<button class="mini-next" onclick={() => playNext()}>{settings.nextCountdown > 0 && !playback.paused ? `Next in ${countdown}s` : 'Next'}</button>{/if}
-      <div class="mini-bar"><div style:width="{progress}%"></div></div>
+      <div class="mini-bar"><div style:width="{live ? liveProgress : progress}%"></div></div>
     {:else}
     <!-- Clicks on the video toggle pause; double-click toggles fullscreen. -->
     <div class="surface" role="presentation" onclick={onSurfaceClick} ondblclick={onSurfaceDbl} onwheel={onWheel}></div>
@@ -352,7 +397,10 @@
       <div class="help" role="dialog" aria-label="Keyboard shortcuts">
         <div class="hh">Keyboard shortcuts <button class="ctl s" onclick={() => (help = false)} aria-label="Close"><Icon name="x" size={16} /></button></div>
         <dl>
-          {#each [
+          {#each live ? [
+            ['Space / K', 'Play / pause'], ['Page Up / Down', 'Previous / next channel'], ['G', 'Channel list'], ['↑ / ↓ or scroll', 'Volume'],
+            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
+          ] : [
             ['Space / K', 'Play / pause'], ['← / →', 'Back / forward 5s'], ['J / L', 'Back / forward 10s'], ['↑ / ↓ or scroll', 'Volume'],
             ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
             ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'], ['Shift + N', 'Next episode'],
@@ -384,7 +432,24 @@
       </div>
     {/if}
 
-    {#if playback.error}
+    {#if playback.error && live}
+      <div class="center msg">
+        <p>{live.name} isn't playing right now. The channel may be offline, or your provider may limit how many streams you can watch at once.</p>
+        <div class="row">
+          <button class="btn" onclick={openExternally}><Icon name="external" size={15} />Try external player</button>
+          <button class="btn" onclick={goLive}><Icon name="refresh" size={15} />Try again</button>
+          {#if nextCh}<button class="btn primary" onclick={() => zap(1)}>Next channel<Icon name="down" size={15} /></button>{/if}
+        </div>
+      </div>
+    {:else if playback.ended && live}
+      <div class="center msg">
+        <p>The stream stopped.</p>
+        <div class="row">
+          <button class="btn primary" onclick={goLive}><Icon name="refresh" size={15} />Reconnect</button>
+          <button class="btn" onclick={() => closePlayer()}>Back to channels</button>
+        </div>
+      </div>
+    {:else if playback.error}
       <div class="center msg">
         <p>{playback.error}</p>
         <div class="row">
@@ -439,7 +504,32 @@
       </div>
     {/if}
 
+    {#if menu === 'channels' && live}
+      <div class="guide" role="dialog" aria-label="Channels">
+        <div class="gh">
+          <input class="gsearch" placeholder="Find a channel" bind:value={chFilter} aria-label="Find a channel" />
+          <button class="ctl s" onclick={() => (menu = '')} aria-label="Close"><Icon name="x" size={16} /></button>
+        </div>
+        <div class="glist">
+          {#each guideList as c (c.id)}
+            {@const nn = nowNext(c.id, tv.now)}
+            <button class="gch" class:sel={c.id === live.id} onclick={() => { void playChannel(c); menu = ''; }}>
+              <span class="glogo">{#if c.logo}<img src={c.logo} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')} />{/if}</span>
+              <span class="gtxt"><b>{c.name}</b>{#if nn.now}<small>{nn.now.t}</small>{/if}</span>
+            </button>
+          {:else}
+            <div class="none">No channels match.</div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <footer class="bottom">
+      {#if live}
+      <div class="livebar">
+        <div class="track"><div class="fill" style:width="{liveProgress}%"></div></div>
+      </div>
+      {:else}
       <div
         class="bar"
         bind:this={bar}
@@ -463,13 +553,19 @@
           <div class="tip" style:left="{hoverX * 100}%">{fmtTime(hoverX * playback.duration)}</div>
         {/if}
       </div>
+      {/if}
 
       <div class="controls">
         <button class="ctl big" onclick={() => { togglePause(); doFlash(playback.paused ? 'pause' : 'play'); }} title={playback.paused ? 'Play (Space)' : 'Pause (Space)'}>
           <Icon name={playback.paused || playback.ended ? 'play' : 'pause'} size={24} fill />
         </button>
-        <button class="ctl" onclick={() => seekBy(-10)} title="Back 10s (J)"><Icon name="back10" size={21} /></button>
-        <button class="ctl" onclick={() => seekBy(10)} title="Forward 10s (L)"><Icon name="fwd10" size={21} /></button>
+        {#if live}
+          <button class="ctl" onclick={() => zap(-1)} disabled={!prevCh} title={prevCh ? `Previous: ${prevCh.name} (Page Up)` : 'Previous channel'}><Icon name="up" size={21} /></button>
+          <button class="ctl" onclick={() => zap(1)} disabled={!nextCh} title={nextCh ? `Next: ${nextCh.name} (Page Down)` : 'Next channel'}><Icon name="down" size={21} /></button>
+        {:else}
+          <button class="ctl" onclick={() => seekBy(-10)} title="Back 10s (J)"><Icon name="back10" size={21} /></button>
+          <button class="ctl" onclick={() => seekBy(10)} title="Forward 10s (L)"><Icon name="fwd10" size={21} /></button>
+        {/if}
 
         <div class="vol">
           <button class="ctl" onclick={toggleMute} title="Mute (M)"><Icon name={volIcon} size={21} /></button>
@@ -481,12 +577,24 @@
           />
         </div>
 
+        {#if live}
+          <button class="livepill" class:behind onclick={() => behind && goLive()} title={behind ? 'Jump to live' : 'Watching live'}><i></i>{behind ? 'Go live' : 'Live'}</button>
+          {#if onNow.now}
+            <div class="onnow" title={onNow.now.d ?? onNow.now.t}>
+              <b>{onNow.now.t}</b> <span>{`${clock(onNow.now.s)}–${clock(onNow.now.e)}${onNow.next ? ` · Next: ${onNow.next.t}` : ''}`}</span>
+            </div>
+          {/if}
+        {:else}
         <button class="time" onclick={() => (settings.showRemaining = !settings.showRemaining)} title="Show {settings.showRemaining ? 'total length' : 'time remaining'}">
           {fmtTime(playback.time)} <span>/ {settings.showRemaining ? `-${fmtTime(Math.max(0, playback.duration - playback.time))}` : fmtTime(playback.duration)}</span>
         </button>
+        {/if}
 
         <div class="spacer"></div>
 
+        {#if live}
+          <button class="ctl" class:on={menu === 'channels'} onclick={() => (menu = menu === 'channels' ? '' : 'channels')} title="Channels (G)"><Icon name="list" size={20} /></button>
+        {:else}
         <div class="menu-wrap">
           <button class="ctl" class:on={menu === 'speed'} onclick={() => (menu = menu === 'speed' ? '' : 'speed')} title="Speed">
             <Icon name="gauge" size={20} />{#if playback.speed !== 1}<b class="badge">{playback.speed}×</b>{/if}
@@ -500,6 +608,7 @@
             </div>
           {/if}
         </div>
+        {/if}
 
         <div class="menu-wrap">
           <button class="ctl" class:on={menu === 'audio'} disabled={audios.length < 2} onclick={() => (menu = menu === 'audio' ? '' : 'audio')} title="Audio">
@@ -542,7 +651,7 @@
                 </div>
                 {#if settings.miniPlayer}<a class="style-link" href="#/settings?tab=playback" onclick={() => setMini(true)}>Subtitle style…</a>{/if}
               {:else}
-                <div class="none">No subtitles in this stream. Add languages in Settings → Playback to fetch them from subtitle addons.</div>
+                <div class="none">{live ? 'This channel has no subtitles or captions.' : 'No subtitles in this stream. Add languages in Settings → Playback to fetch them from subtitle addons.'}</div>
               {/if}
             </div>
           {/if}
@@ -556,6 +665,36 @@
 {/if}
 
 <style>
+  .chlogo { position: absolute; left: 50%; top: 50%; width: min(220px, 30vw); max-height: 30vh; object-fit: contain; transform: translate(-50%, -50%); opacity: 0.35; }
+  .livebar { padding: 14px 0 6px; }
+  .livebar .track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.22); overflow: hidden; }
+  .livebar .fill { height: 100%; background: var(--accent); }
+  .livepill {
+    display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 4px 9px; margin-left: 6px;
+    background: rgb(255 255 255 / 0.12); color: #fff; font: 800 11.5px var(--font); letter-spacing: 0.08em; text-transform: uppercase; cursor: default;
+  }
+  .livepill i { width: 7px; height: 7px; border-radius: 50%; background: #ff3b4e; }
+  .livepill.behind { cursor: pointer; background: rgb(255 255 255 / 0.2); }
+  .livepill.behind i { background: rgb(255 255 255 / 0.5); }
+  .livepill.behind:hover { background: rgb(255 255 255 / 0.3); }
+  .onnow { min-width: 0; margin-left: 12px; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+  .onnow span { color: rgb(255 255 255 / 0.65); }
+  .guide {
+    position: absolute; right: 16px; bottom: 96px; top: 76px; width: 330px; display: flex; flex-direction: column; z-index: 3;
+    background: rgb(16 16 20 / 0.92); border: 1px solid rgb(255 255 255 / 0.1); border-radius: 14px; backdrop-filter: blur(16px); overflow: hidden;
+  }
+  .gh { display: flex; gap: 6px; padding: 10px; border-bottom: 1px solid rgb(255 255 255 / 0.08); }
+  .gsearch { flex: 1; min-width: 0; border: 0; border-radius: 8px; padding: 8px 10px; background: rgb(255 255 255 / 0.1); color: #fff; font: 500 13.5px var(--font); outline: none; }
+  .glist { overflow-y: auto; flex: 1; padding: 6px; }
+  .gch { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: #fff; text-align: left; padding: 7px 8px; border-radius: 9px; cursor: pointer; }
+  .gch:hover { background: rgb(255 255 255 / 0.08); }
+  .gch.sel { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .glogo { width: 44px; height: 28px; flex-shrink: 0; border-radius: 5px; background: rgb(255 255 255 / 0.08); display: grid; place-items: center; overflow: hidden; }
+  .glogo img { max-width: 90%; max-height: 90%; object-fit: contain; }
+  .gtxt { min-width: 0; display: flex; flex-direction: column; }
+  .gtxt b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gtxt small { font-size: 11.5px; color: rgb(255 255 255 / 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .guide .none { padding: 20px; text-align: center; color: rgb(255 255 255 / 0.6); font-size: 13px; }
   .player { position: fixed; inset: 0; z-index: 90; color: #fff; font-family: var(--font); user-select: none; }
   .player.hide { cursor: none; }
   .surface { position: absolute; inset: 0; }

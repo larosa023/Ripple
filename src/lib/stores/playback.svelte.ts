@@ -25,8 +25,17 @@ export interface Track {
   'demux-channel-count'?: number;
 }
 
+/** Set while watching a live TV channel (no seeking, progress or next episode). */
+export interface LiveInfo {
+  id: string;
+  name: string;
+  logo: string;
+  group: string;
+}
+
 interface PlaybackState {
   active: boolean;
+  live: LiveInfo | null;
   title: string;
   subtitle: string;
   meta: MetaDetail | null;
@@ -65,6 +74,7 @@ interface PlaybackState {
 
 const blank = (): PlaybackState => ({
   active: false,
+  live: null,
   title: '',
   subtitle: '',
   meta: null,
@@ -201,13 +211,13 @@ async function subscribe(token: number) {
 }
 
 function persistProgress() {
-  if (playback.videoId && playback.duration > 0) saveProgress(playback.videoId, playback.time, playback.duration);
+  if (!playback.live && playback.videoId && playback.duration > 0) saveProgress(playback.videoId, playback.time, playback.duration);
 }
 
 /** Starts a stream inside Ripple. Throws NEED_MPV:... if mpv isn't installed. */
 export async function openPlayer(
   p: Prepared,
-  info: { title: string; subtitle: string; meta: MetaDetail; videoId: string; stream?: SourcedStream | null },
+  info: { title: string; subtitle: string; meta: MetaDetail | null; videoId: string; stream?: SourcedStream | null; live?: LiveInfo },
 ) {
   // Switching videos (next episode): keep the player window, fullscreen and mini mode as they are.
   const keep = playback.active ? { fullscreen: playback.fullscreen, mini: playback.mini } : null;
@@ -225,12 +235,13 @@ export async function openPlayer(
     videoId: info.videoId,
     source: p,
     stream: info.stream ?? null,
+    live: info.live ?? null,
   });
   document.documentElement.classList.add('playing');
   try {
     await subscribe(token);
     if (token !== startToken) return;
-    const start = settings.resume ? resumePoint(info.videoId) : 0;
+    const start = settings.resume && !info.live ? resumePoint(info.videoId) : 0;
     await invoke('player_start', {
       req: {
         url: p.url,
@@ -242,6 +253,7 @@ export async function openPlayer(
         extraArgs: settings.player === 'mpv' ? parseArgs(settings.playerArgs) : [],
         subLangs: settings.subtitleLangs,
         volume: settings.volume,
+        live: !!info.live,
       },
     });
     if (token !== startToken || !playback.active) {
@@ -249,9 +261,11 @@ export async function openPlayer(
       if (!playback.active) await invoke('player_stop').catch(() => {});
       return;
     }
-    recordPlay(info.meta, info.videoId, info.subtitle);
-    clearInterval(saveTimer);
-    saveTimer = setInterval(persistProgress, 5000);
+    if (info.meta && !info.live) {
+      recordPlay(info.meta, info.videoId, info.subtitle);
+      clearInterval(saveTimer);
+      saveTimer = setInterval(persistProgress, 5000);
+    }
   } catch (e) {
     if (token !== startToken || String(e).startsWith('CANCELLED:')) return; // superseded; not an error
     await closePlayer(false);
@@ -289,7 +303,7 @@ let lastAniSkip: Segment[] = [];
 
 async function loadAniSkip() {
   const id = playback.videoId;
-  if (!id || aniskipFor === id || !(playback.duration > 0) || playback.meta?.type === 'movie') return;
+  if (!id || aniskipFor === id || !(playback.duration > 0) || !playback.meta || playback.meta.type === 'movie') return;
   aniskipFor = id;
   lastAniSkip = [];
   const segs = await fromAniSkip(id, playback.duration);
