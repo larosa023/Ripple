@@ -21,6 +21,8 @@ interface Job {
   audio: number;
   version: number;
   added: boolean;
+  /** Ticks in a row that showed a different audio track than the job was made for. */
+  audioMiss: number;
   timer?: ReturnType<typeof setInterval>;
   lastTime: number;
 }
@@ -84,7 +86,7 @@ export async function startCaption(p: Prepared, startSeconds: number, title: str
     if (created) void call('DELETE', `/jobs/${created.id}`);
     return;
   }
-  job = { id: created.id, srt: created.srt, token: my, audio: audioIndex(), version: 0, added: false, lastTime: playback.time };
+  job = { id: created.id, srt: created.srt, token: my, audio: audioIndex(), version: 0, added: false, audioMiss: 0, lastTime: playback.time };
   // Let the subtitle menu name it.
   p.subInfo = [...(p.subInfo ?? []), { url: created.srt, lang: wantedLang(), source: CAPTION_SOURCE }];
   job.timer = setInterval(() => void tick(p, title), 2500);
@@ -96,7 +98,11 @@ async function tick(p: Prepared, title: string) {
   if (!j || j.token !== token || !playback.active) return;
 
   // Switched to another audio language: start over with that track.
-  if (playback.aid !== false && audioIndex() !== j.audio && playback.tracks.length) {
+  // Only after it has been seen twice in a row, so a track list that's still filling in doesn't
+  // throw away work.
+  const audioChanged = playback.aid !== false && playback.tracks.length > 0 && audioIndex() !== j.audio;
+  j.audioMiss = audioChanged ? j.audioMiss + 1 : 0;
+  if (j.audioMiss >= 2) {
     const old = captionTrack();
     if (old) await mpv('sub-remove', old.id);
     await startCaption(p, playback.time, title);
