@@ -26,6 +26,7 @@
     { id: 'look', label: 'Look', icon: 'palette' },
     { id: 'layout', label: 'Layout', icon: 'layout' },
     { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'player', label: 'Player', icon: 'play' },
     { id: 'code', label: 'CSS', icon: 'code' },
     { id: 'themes', label: 'Themes', icon: 'download' },
   ];
@@ -260,7 +261,30 @@
         <label class="slider"><span>Dim</span><input type="range" min="0" max="0.95" step="0.05" bind:value={look.bgDim} /><b>{Math.round(look.bgDim * 100)}%</b></label>
         <label class="slider"><span>Blur</span><input type="range" min="0" max="40" step="1" bind:value={look.bgBlur} /><b>{look.bgBlur}px</b></label>
       {/if}
+
+      <h3>Motion &amp; details</h3>
+      <div class="opt"><span>Animations</span>
+        <div class="seg">
+          {#each [['fast', 'Snappy'], ['normal', 'Normal'], ['slow', 'Relaxed']] as [v, l] (v)}
+            <button class:on={look.motion === v} disabled={look.reduceMotion} onclick={() => (look.motion = v as typeof look.motion)}>{l}</button>
+          {/each}
+        </div>
+      </div>
       <div class="toggle"><span>Reduce motion</span><Switch bind:checked={look.reduceMotion} label="Reduce motion" /></div>
+      <div class="opt"><span>Scrollbars</span>
+        <div class="seg">
+          {#each [['normal', 'Normal'], ['thin', 'Thin'], ['hidden', 'Hidden']] as [v, l] (v)}
+            <button class:on={look.scrollbars === v} onclick={() => (look.scrollbars = v as typeof look.scrollbars)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Clock</span>
+        <div class="seg">
+          {#each [['auto', 'Windows'], ['12h', '12-hour'], ['24h', '24-hour']] as [v, l] (v)}
+            <button class:on={settings.clock === v} onclick={() => (settings.clock = v as typeof settings.clock)}>{l}</button>
+          {/each}
+        </div>
+      </div>
 
     {:else if ui.studioTab === 'layout'}
       <h3>Navigation</h3>
@@ -398,6 +422,79 @@
         {/each}
       </div>
 
+    {:else if ui.studioTab === 'player'}
+      <h3>Player look</h3>
+      <div class="opt col"><span>Accent</span>
+        <div class="accents">
+          <button class="acc app" class:on={!look.playerAccent} style:--c={look.colors.accent} title="Same as the app" aria-label="Same as the app accent" onclick={() => (look.playerAccent = '')}></button>
+          {#each ACCENTS as a (a)}
+            <button class="acc" class:on={look.playerAccent.toLowerCase() === a} style:--c={a} aria-label={`Player accent ${a}`} onclick={() => (look.playerAccent = a)}></button>
+          {/each}
+          <label class="acc custom" title="Custom color" class:on={!!look.playerAccent && !ACCENTS.includes(look.playerAccent.toLowerCase())}>
+            <input type="color" value={look.playerAccent || look.colors.accent} oninput={(e) => (look.playerAccent = e.currentTarget.value)} />
+          </label>
+        </div>
+      </div>
+      <div class="opt"><span>Seek bar</span>
+        <div class="seg">
+          {#each [['thin', 'Thin'], ['thick', 'Thick']] as [v, l] (v)}
+            <button class:on={look.seekbar === v} onclick={() => (look.seekbar = v as typeof look.seekbar)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Buttons</span>
+        <div class="seg">
+          {#each [['regular', 'Regular'], ['large', 'Large']] as [v, l] (v)}
+            <button class:on={look.playerControls === v} onclick={() => (look.playerControls = v as typeof look.playerControls)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Menus</span>
+        <div class="seg">
+          {#each [['glass', 'See-through'], ['solid', 'Solid']] as [v, l] (v)}
+            <button class:on={look.playerMenus === v} onclick={() => (look.playerMenus = v as typeof look.playerMenus)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+
+      <h3>Controls</h3>
+      <div class="opt"><span>Skip buttons</span>
+        <div class="seg">
+          {#each [5, 10, 15, 30] as v (v)}
+            <button class:on={settings.seekStep === v} onclick={() => (settings.seekStep = v)}>{v}s</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Arrow keys</span>
+        <div class="seg">
+          {#each [3, 5, 10] as v (v)}
+            <button class:on={settings.arrowStep === v} onclick={() => (settings.arrowStep = v)}>{v}s</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Scroll wheel</span>
+        <div class="seg">
+          {#each [['volume', 'Volume'], ['seek', 'Seek'], ['off', 'Nothing']] as [v, l] (v)}
+            <button class:on={settings.wheelAction === v} onclick={() => (settings.wheelAction = v as typeof settings.wheelAction)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="opt"><span>Double-click</span>
+        <div class="seg">
+          {#each [['fullscreen', 'Fullscreen'], ['seek', 'Seek sides'], ['off', 'Nothing']] as [v, l] (v)}
+            <button class:on={settings.dblClick === v} onclick={() => (settings.dblClick = v as typeof settings.dblClick)}>{l}</button>
+          {/each}
+        </div>
+      </div>
+      {#if settings.dblClick === 'seek'}<p class="faint small">Double-click the left or right third of the picture to jump {settings.seekStep}s; the middle still goes fullscreen.</p>{/if}
+      <label class="slider"><span>Hide controls</span><input type="range" min="1" max="8" step="0.5" bind:value={settings.hideDelay} /><b>{settings.hideDelay}s</b></label>
+      <div class="toggle"><span>Show “Ends at” time</span><Switch bind:checked={settings.showEndsAt} label="Show Ends at time" /></div>
+      <div class="toggle"><span>Clock shows time left</span><Switch bind:checked={settings.showRemaining} label="Clock shows time left" /></div>
+
+      <h3>Subtitles</h3>
+      <p class="faint small">Font, size, color, background and position are in Settings → Playback, with a live preview.</p>
+      <a class="btn sm" href="#/settings?tab=playback" onclick={() => (ui.studioOpen = false)}><Icon name="cc" size={14} />Subtitle style</a>
+
     {:else if ui.studioTab === 'code'}
       <h3>Custom CSS</h3>
       <p class="faint small">Applied on top of everything. Live as you type.</p>
@@ -411,12 +508,15 @@
 --accent --on-accent --glass
 --radius --btn-radius
 --poster-w --gap --page-pad --row-gap
---font --font-display --dur</pre>
+--font --font-display --dur
+--player-accent</pre>
         <p class="small faint">Attributes on <code>&lt;html&gt;</code></p>
         <pre>[data-nav="sidebar|rail|icons|top|dock"]
 [data-card="plain|outlined|elevated|glass|overlay"]
 [data-hover="lift|zoom|glow|none"]
-[data-light="1"]  (light themes)</pre>
+[data-light="1"]  (light themes)
+[data-seekbar="thin|thick"]  [data-pmenu="glass|solid"]
+[data-scroll="normal|thin|hidden"]</pre>
         <p class="small faint">Handy classes</p>
         <pre>.nav .item  .pc .art  .row  .hero
 .page  .page-title  .btn.primary  .chip</pre>
@@ -461,7 +561,7 @@
 
 <style>
   .studio {
-    position: fixed; top: var(--chrome-h, 0px); right: 0; bottom: 0; width: 400px; z-index: 50;
+    position: fixed; top: var(--chrome-h, 0px); right: 0; bottom: 0; width: 400px; z-index: 95;
     display: flex; flex-direction: column;
     background: var(--bg-2); border-left: 1px solid var(--line);
     box-shadow: -24px 0 60px rgb(0 0 0 / 0.4);
@@ -533,6 +633,8 @@
     background: conic-gradient(#ff4d4d, #ffcc33, #4fd087, #33c3ff, #8b6cff, #ff4dc4, #ff4d4d);
   }
   .acc.custom.on { --c: var(--accent); }
+  /* "Same as the app": the app accent with a hollow center. */
+  .acc.app { background: radial-gradient(circle, var(--bg-2) 0 30%, var(--c) 31%); }
   .acc.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
   /* Fine-tune colors */
@@ -569,6 +671,8 @@
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .opt > span { font-size: 13px; color: var(--text-2); flex-shrink: 0; }
   .opt .select { width: 220px; height: 32px; }
+  .opt.col { flex-direction: column; align-items: stretch; gap: 10px; }
+  .opt .seg button:disabled { opacity: 0.45; cursor: default; }
   .slider { display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
   .slider span { color: var(--text-2); }
   .slider b { font-weight: 600; font-size: 12px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }

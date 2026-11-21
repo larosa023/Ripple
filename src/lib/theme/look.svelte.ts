@@ -54,7 +54,17 @@ export interface Look {
   bgDim: number; // 0..1
   bgBlur: number; // px
   bgAnimation: BgAnimation;
+  // Player
+  /** Seek bar and selection color in the player; '' uses the app accent. */
+  playerAccent: string;
+  seekbar: 'thin' | 'thick';
+  /** Player menus: see-through or solid. */
+  playerMenus: 'glass' | 'solid';
+  /** Size of the player buttons. */
+  playerControls: 'regular' | 'large';
   // Motion & code
+  motion: 'fast' | 'normal' | 'slow';
+  scrollbars: 'normal' | 'thin' | 'hidden';
   reduceMotion: boolean;
   customCss: string;
 }
@@ -98,6 +108,12 @@ export const DEFAULT_LOOK: Look = {
   bgDim: 0.7,
   bgBlur: 0,
   bgAnimation: 'none',
+  playerAccent: '',
+  seekbar: 'thin',
+  playerMenus: 'glass',
+  playerControls: 'regular',
+  motion: 'normal',
+  scrollbars: 'normal',
   reduceMotion: false,
   customCss: '',
 };
@@ -147,6 +163,7 @@ export function normalizeLook(input: Partial<Look>): Look {
   for (const k of Object.keys(base.colors) as (keyof Palette)[]) {
     if (typeof merged.colors[k] !== 'string' || !/^#[0-9a-f]{3,8}$/i.test(merged.colors[k])) merged.colors[k] = base.colors[k];
   }
+  if (merged.playerAccent && !/^#[0-9a-f]{3,8}$/i.test(merged.playerAccent)) merged.playerAccent = '';
   merged.uiScale = Math.min(1.5, Math.max(0.7, merged.uiScale));
   if (merged.customFont && (typeof merged.customFont.name !== 'string' || typeof merged.customFont.dataUrl !== 'string')) merged.customFont = null;
   return merged;
@@ -164,6 +181,11 @@ const CHOICES = {
   detailLayout: ['cinematic', 'classic'],
   episodeLayout: ['list', 'grid'],
   bgAnimation: ['none', 'aurora', 'bokeh'],
+  seekbar: ['thin', 'thick'],
+  playerMenus: ['glass', 'solid'],
+  playerControls: ['regular', 'large'],
+  motion: ['fast', 'normal', 'slow'],
+  scrollbars: ['normal', 'thin', 'hidden'],
 } as const satisfies Partial<Record<keyof Look, readonly string[]>>;
 
 const stored = localStorage.getItem('ripple:look');
@@ -318,6 +340,12 @@ export function applyLook(l: Look) {
   root.dataset.card = l.cardStyle;
   root.dataset.hover = l.hover;
   root.dataset.motion = l.reduceMotion ? 'reduce' : '';
+  s.setProperty('--dur', l.reduceMotion ? '0ms' : l.motion === 'fast' ? '90ms' : l.motion === 'slow' ? '280ms' : '160ms');
+  s.setProperty('--player-accent', l.playerAccent || c.accent);
+  root.dataset.scroll = l.scrollbars;
+  root.dataset.seekbar = l.seekbar;
+  root.dataset.pmenu = l.playerMenus;
+  root.dataset.pctl = l.playerControls;
   document.body.style.zoom = String(l.uiScale);
 
   if (!cssEl) {

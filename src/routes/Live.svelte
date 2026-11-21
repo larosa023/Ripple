@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { clockTime } from '../lib/stores/settings.svelte';
   // Live TV: channels from your M3U playlists, grouped, searchable, with what's on now.
   import Icon from '../lib/components/Icon.svelte';
   import Switch from '../lib/components/Switch.svelte';
@@ -189,8 +190,7 @@
     document.querySelector('.live .channels')?.scrollTo({ top: 0 });
   }
 
-  const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-  const fmt = (t: number) => TIME.format(t);
+  const fmt = (t: number) => clockTime(t);
 
   function play(c: Channel) {
     void playChannel(c, list);

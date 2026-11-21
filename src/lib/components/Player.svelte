@@ -7,7 +7,7 @@
   import { filmUrl } from '../letterboxd';
   import { isTauri } from '../stremio/http';
   import { backdropOf } from '../stremio/images';
-  import { settings } from '../stores/settings.svelte';
+  import { clockTime, settings } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
   import { prefetchNext, playNext } from '../watch';
   import { goLive, neighbour, playChannel, zap, zapChannels } from '../iptv/play.svelte';
@@ -39,12 +39,14 @@
     toggleFullscreen,
     toggleMute,
     togglePause,
-    trackLabel,
+    trackParts,
   } from '../stores/playback.svelte';
+  import { baseLang } from '../lang';
+  import { openStudio, ui } from '../stores/ui.svelte';
 
   let showUi = $state(true);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let menu: '' | 'subs' | 'audio' | 'speed' | 'channels' | 'more' = $state('');
+  let menu: '' | 'tracks' | 'speed' | 'channels' | 'more' = $state('');
   let stats = $state(false);
   let hoverX = $state<number | null>(null);
   let scrubbing = $state(false);
@@ -59,8 +61,15 @@
     volTimer = setTimeout(() => (volPill = false), 900);
   }
   function onWheel(e: WheelEvent) {
-    // Scroll over the video to change volume.
+    // Scroll over the video: volume or seeking, whichever you picked.
+    if (settings.wheelAction === 'off') return;
     e.preventDefault();
+    if (settings.wheelAction === 'seek' && !live && playback.duration) {
+      seekBy(e.deltaY < 0 ? settings.arrowStep : -settings.arrowStep);
+      doFlash(e.deltaY < 0 ? 'fwd' : 'back');
+      poke();
+      return;
+    }
     setVolume(playback.volume + (e.deltaY < 0 ? 5 : -5));
     showVol();
   }
@@ -139,7 +148,7 @@
 
   // ---------- subtitles ----------
   $effect(() => {
-    void [settings.subFont, settings.subScale, settings.subColor, settings.subStyle, settings.subPos, settings.subBold, settings.subOverride];
+    void [settings.subFont, settings.subScale, settings.subColor, settings.subStyle, settings.subPos, settings.subBold, settings.subOverride, settings.subBack];
     if (playback.loaded) applySubStyle();
   });
 
@@ -247,8 +256,7 @@
   const live = $derived(playback.live);
   const onNow = $derived(live ? nowNext(live.id, tv.now) : { now: null, next: null });
   const liveProgress = $derived(onNow.now ? Math.min(100, ((tv.now - onNow.now.s) / (onNow.now.e - onNow.now.s)) * 100) : 0);
-  const CLOCK = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-  const clock = (t: number) => CLOCK.format(t);
+  const clock = (t: number) => clockTime(t);
   const prevCh = $derived(live ? neighbour(-1) : null);
   const nextCh = $derived(live ? neighbour(1) : null);
   /** Paused live TV falls behind; this jumps back to what's airing. */
@@ -270,7 +278,59 @@
 
   const subs = $derived(playback.tracks.filter((t) => t.type === 'sub'));
   const audios = $derived(playback.tracks.filter((t) => t.type === 'audio'));
+
+  // ---------- audio & subtitle menu ----------
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  function toggleMenu(m: typeof menu) {
+    menu = menu === m ? '' : m;
+    subQuery = '';
+  }
+  let subQuery = $state('');
+  const prefLangs = $derived(settings.subtitleLangs.split(',').map((l) => baseLang(l.trim())).filter(Boolean));
+  const rank = (base: string) => {
+    const i = prefLangs.indexOf(base);
+    return i < 0 ? 999 : i;
+  };
+  // Full subtitles first, then SDH, then forced (signs only) for each language.
+  const kind = (tags: string[]) => (tags.includes('Forced') ? 2 : tags.includes('SDH') || tags.includes('CC') ? 1 : 0);
+  const audioRows = $derived(audios.map((t) => ({ t, p: trackParts(t) })));
+  const subRows = $derived.by(() => {
+    const rows = subs
+      .map((t) => ({ t, p: trackParts(t) }))
+      .sort(
+        (a, b) =>
+          rank(a.p.base) - rank(b.p.base) ||
+          a.p.name.localeCompare(b.p.name) ||
+          kind(a.p.tags) - kind(b.p.tags) ||
+          Number(a.p.addon) - Number(b.p.addon) ||
+          a.t.id - b.t.id,
+      );
+    // Two addon subtitles in the same language would look identical: number them ("· 2") so you can try another.
+    const seen = new Map<string, number>();
+    for (const r of rows) {
+      const key = `${r.p.name}|${r.p.detail}|${r.p.tags.join()}`;
+      const n = (seen.get(key) ?? 0) + 1;
+      seen.set(key, n);
+      if (n > 1) r.p.detail = r.p.detail ? `${r.p.detail} · ${n}` : `#${n}`;
+    }
+    return rows;
+  });
+  const shownSubs = $derived.by(() => {
+    const q = subQuery.trim().toLowerCase();
+    return q ? subRows.filter((r) => `${r.p.name} ${r.p.detail} ${r.p.tags.join(' ')}`.toLowerCase().includes(q)) : subRows;
+  });
+  /** Where "Other languages" starts (only when some of your languages are listed above it). */
+  const otherFrom = $derived.by(() => {
+    const i = shownSubs.findIndex((r) => rank(r.p.base) === 999);
+    return i > 0 ? i : -1;
+  });
   const progress = $derived(playback.duration ? (playback.time / playback.duration) * 100 : 0);
+  // Rounded to the minute, so the label only changes when the minute does.
+  const endsAt = $derived.by(() => {
+    if (!playback.duration || playback.duration < 60) return '';
+    const left = (playback.duration - playback.time) / (playback.speed || 1);
+    return clockTime(Math.round((Date.now() + left * 1000) / 60000) * 60000);
+  });
   const buffered = $derived(playback.duration ? Math.min(100, ((playback.time + playback.cacheTime) / playback.duration) * 100) : 0);
   const loading = $derived(!playback.error && (!playback.ready || playback.buffering) && !playback.ended);
 
@@ -298,7 +358,7 @@
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
       if (!playback.paused && !menu && !scrubbing && playback.loaded) showUi = false;
-    }, 2600);
+    }, Math.max(1, settings.hideDelay) * 1000);
   }
   $effect(() => {
     if (playback.paused || menu) showUi = true;
@@ -343,13 +403,23 @@
       doFlash(playback.paused ? 'pause' : 'play');
     }, 200);
   }
-  function onSurfaceDbl() {
+  function onSurfaceDbl(e: MouseEvent) {
     clearTimeout(clickTimer);
+    if (settings.dblClick === 'off') return;
+    if (settings.dblClick === 'seek' && !live && playback.duration) {
+      // Double-click the left or right third to jump back or forward; the middle still goes fullscreen.
+      const x = e.clientX / window.innerWidth;
+      if (x < 1 / 3 || x > 2 / 3) {
+        seekBy(x < 0.5 ? -settings.seekStep : settings.seekStep);
+        doFlash(x < 0.5 ? 'back' : 'fwd');
+        return;
+      }
+    }
     toggleFullscreen();
   }
 
   function onKey(e: KeyboardEvent) {
-    if (!playback.active || playback.mini) return;
+    if (!playback.active || playback.mini || ui.studioOpen) return;
     const target = e.target as HTMLElement;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
     const k = e.key;
@@ -372,11 +442,11 @@
       handled(); // no seeking or speed changes on live TV
     } else if (k === 'ArrowLeft' || k === 'j' || k === 'J') {
       handled();
-      seekBy(k === 'ArrowLeft' && !e.shiftKey ? -5 : -10);
+      seekBy(-(k === 'ArrowLeft' ? settings.arrowStep * (e.shiftKey ? 3 : 1) : settings.seekStep));
       doFlash('back');
     } else if (k === 'ArrowRight' || k === 'l' || k === 'L') {
       handled();
-      seekBy(k === 'ArrowRight' && !e.shiftKey ? 5 : 10);
+      seekBy(k === 'ArrowRight' ? settings.arrowStep * (e.shiftKey ? 3 : 1) : settings.seekStep);
       doFlash('fwd');
     } else if (k === 'ArrowUp') {
       handled();
@@ -520,8 +590,9 @@
             ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
           ] : [
-            ['Space / K', 'Play / pause'], ['← / →', 'Back / forward 5s'], ['J / L', 'Back / forward 10s'], ['↑ / ↓ or scroll', 'Volume'],
-            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
+            ['Space / K', 'Play / pause'], ['← / →', `Back / forward ${settings.arrowStep}s (Shift: ${settings.arrowStep * 3}s)`], ['J / L', `Back / forward ${settings.seekStep}s`],
+            ['↑ / ↓' + (settings.wheelAction === 'volume' ? ' or scroll' : ''), 'Volume'], ...(settings.wheelAction === 'seek' ? [['Scroll', `Back / forward ${settings.arrowStep}s`]] : []),
+            ['M', 'Mute'], ['F' + (settings.dblClick === 'fullscreen' ? ' or double-click' : ''), 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
             ['Shift + Z / X', 'Audio earlier / later'], ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'],
             ['Shift + N', 'Next episode'], ['A', 'Fit / fill / stretch'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
@@ -694,8 +765,8 @@
           <button class="ctl" onclick={() => zap(-1)} disabled={!prevCh} title={prevCh ? `Previous: ${prevCh.name} (Page Up)` : 'Previous channel'}><Icon name="up" size={21} /></button>
           <button class="ctl" onclick={() => zap(1)} disabled={!nextCh} title={nextCh ? `Next: ${nextCh.name} (Page Down)` : 'Next channel'}><Icon name="down" size={21} /></button>
         {:else}
-          <button class="ctl" onclick={() => seekBy(-10)} title="Back 10s (J)"><Icon name="back10" size={21} /></button>
-          <button class="ctl" onclick={() => seekBy(10)} title="Forward 10s (L)"><Icon name="fwd10" size={21} /></button>
+          <button class="ctl skipn" onclick={() => seekBy(-settings.seekStep)} title="Back {settings.seekStep}s (J)"><Icon name="replay" size={22} /><span>{settings.seekStep}</span></button>
+          <button class="ctl skipn" onclick={() => seekBy(settings.seekStep)} title="Forward {settings.seekStep}s (L)"><Icon name="forward" size={22} /><span>{settings.seekStep}</span></button>
         {/if}
 
         <div class="vol">
@@ -719,6 +790,7 @@
         <button class="time" onclick={() => (settings.showRemaining = !settings.showRemaining)} title="Show {settings.showRemaining ? 'total length' : 'time remaining'}">
           {fmtTime(playback.time)} <span>/ {settings.showRemaining ? `-${fmtTime(Math.max(0, playback.duration - playback.time))}` : fmtTime(playback.duration)}</span>
         </button>
+        {#if settings.showEndsAt && endsAt}<span class="ends" title="When this finishes, at the current speed">Ends at {endsAt}</span>{/if}
         {/if}
 
         <div class="spacer"></div>
@@ -727,88 +799,123 @@
           <button class="ctl" class:on={menu === 'channels'} onclick={() => (menu = menu === 'channels' ? '' : 'channels')} title="Channels (G)"><Icon name="list" size={20} /></button>
         {:else}
         <div class="menu-wrap">
-          <button class="ctl" class:on={menu === 'speed'} onclick={() => (menu = menu === 'speed' ? '' : 'speed')} title="Speed">
-            <Icon name="gauge" size={20} />{#if playback.speed !== 1}<b class="badge">{playback.speed}×</b>{/if}
+          <button class="ctl" class:on={menu === 'speed'} onclick={() => toggleMenu('speed')} title="Playback speed ([ / ])" aria-expanded={menu === 'speed'}>
+            <Icon name="gauge" size={20} />{#if playback.speed !== 1}<b class="badge">{+playback.speed.toFixed(2)}×</b>{/if}
           </button>
           {#if menu === 'speed'}
-            <div class="menu">
-              <div class="mh">Speed</div>
-              {#each [0.5, 0.75, 1, 1.25, 1.5, 2] as s (s)}
-                <button class:sel={Math.abs(playback.speed - s) < 0.01} onclick={() => { setSpeed(s); menu = ''; }}>{s === 1 ? 'Normal' : `${s}×`}</button>
-              {/each}
+            <div class="pmenu speed" role="dialog" aria-label="Playback speed">
+              <div class="phead"><span>Playback speed</span><b class="val">{playback.speed === 1 ? 'Normal' : `${+playback.speed.toFixed(2)}×`}</b></div>
+              <div class="chips">
+                {#each SPEEDS as sp (sp)}
+                  <button class:sel={Math.abs(playback.speed - sp) < 0.01} onclick={() => setSpeed(sp)}>{sp === 1 ? '1×' : `${sp}×`}</button>
+                {/each}
+              </div>
+              <label class="fine">
+                <input type="range" min="0.25" max="3" step="0.05" value={playback.speed} oninput={(e) => setSpeed(+e.currentTarget.value)} style:--v="{((playback.speed - 0.25) / 2.75) * 100}%" aria-label="Fine speed" />
+              </label>
             </div>
           {/if}
         </div>
         {/if}
 
         <div class="menu-wrap">
-          <button class="ctl" class:on={menu === 'audio'} disabled={audios.length < 2} onclick={() => (menu = menu === 'audio' ? '' : 'audio')} title="Audio">
-            <Icon name="audio" size={20} />
-          </button>
-          {#if menu === 'audio'}
-            <div class="menu">
-              <div class="mh">Audio</div>
-              {#each audios as t (t.id)}
-                <button class:sel={playback.aid === t.id} onclick={() => { chooseAudio(t); menu = ''; }}>{trackLabel(t)}</button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <div class="menu-wrap">
-          <button class="ctl" class:on={menu === 'subs' || playback.sid !== false} onclick={() => (menu = menu === 'subs' ? '' : 'subs')} title="Subtitles (C)">
+          <button class="ctl" class:on={menu === 'tracks' || playback.sid !== false} onclick={() => toggleMenu('tracks')} title="Audio & subtitles (C cycles subtitles)" aria-expanded={menu === 'tracks'}>
             <Icon name="cc" size={20} />
           </button>
-          {#if menu === 'subs'}
-            <div class="menu">
-              <div class="mh">Subtitles</div>
-              <button class:sel={playback.sid === false} onclick={() => { chooseSub(null); menu = ''; }}>Off</button>
-              {#each subs as t (t.id)}
-                <button class:sel={playback.sid === t.id} onclick={() => { chooseSub(t); menu = ''; }}>{trackLabel(t)}</button>
-              {/each}
-              {#if subs.length}
-                <div class="sizer">
-                  <span>Size</span>
-                  <button onclick={() => changeSubScale(-0.1)} aria-label="Smaller subtitles">A−</button>
-                  <b>{Math.round(settings.subScale * 100)}%</b>
-                  <button onclick={() => changeSubScale(0.1)} aria-label="Larger subtitles">A+</button>
+          {#if menu === 'tracks'}
+            <div class="pmenu tracks" class:two={audioRows.length > 1} role="dialog" aria-label="Audio and subtitles">
+              <div class="cols">
+                {#if audioRows.length > 1}
+                  <section class="col">
+                    <div class="phead"><Icon name="audio" size={15} /><span>Audio</span></div>
+                    <div class="opts">
+                      {#each audioRows as r (r.t.id)}
+                        <button class="opt" class:sel={playback.aid === r.t.id} onclick={() => chooseAudio(r.t)}>
+                          <span class="txt"><b>{r.p.name}</b>{#if r.p.detail}<small>{r.p.detail}</small>{/if}</span>
+                          {#each r.p.tags as tag (tag)}<em class="tag">{tag}</em>{/each}
+                          <i class="tick"><Icon name="check" size={16} stroke={2.4} /></i>
+                        </button>
+                      {/each}
+                    </div>
+                  </section>
+                {/if}
+                <section class="col">
+                  <div class="phead">
+                    <Icon name="cc" size={15} /><span>Subtitles</span>
+                    {#if subRows.length > 8}
+                      <input class="find" placeholder="Find a language" bind:value={subQuery} spellcheck="false" aria-label="Find a subtitle language" />
+                    {/if}
+                  </div>
+                  <div class="opts">
+                    {#if !subQuery}
+                      <button class="opt" class:sel={playback.sid === false} onclick={() => chooseSub(null)}>
+                        <span class="txt"><b>Off</b></span>
+                        <i class="tick"><Icon name="check" size={16} stroke={2.4} /></i>
+                      </button>
+                    {/if}
+                    {#each shownSubs as r, i (r.t.id)}
+                      {#if i === otherFrom}<div class="divider">Other languages</div>{/if}
+                      <button class="opt" class:sel={playback.sid === r.t.id} onclick={() => chooseSub(r.t)}>
+                        <span class="txt"><b>{r.p.name}</b>{#if r.p.detail}<small>{r.p.detail}</small>{/if}</span>
+                        {#each r.p.tags as tag (tag)}<em class="tag">{tag}</em>{/each}
+                        <i class="tick"><Icon name="check" size={16} stroke={2.4} /></i>
+                      </button>
+                    {:else}
+                      <div class="none">
+                        {#if subQuery}No subtitles match “{subQuery}”.
+                        {:else if live}This channel has no subtitles or captions.
+                        {:else}No subtitles in this stream. Add languages in Settings → Playback to fetch them from your subtitle addons.{/if}
+                      </div>
+                    {/each}
+                  </div>
+                </section>
+              </div>
+              {#if subRows.length}
+                <div class="pfoot">
+                  <div class="step" title="Subtitle size">
+                    <span>Size</span>
+                    <button onclick={() => changeSubScale(-0.1)} aria-label="Smaller subtitles">−</button>
+                    <b>{Math.round(settings.subScale * 100)}%</b>
+                    <button onclick={() => changeSubScale(0.1)} aria-label="Larger subtitles">+</button>
+                  </div>
+                  <div class="step" title="Show subtitles earlier or later (Z / X)">
+                    <span>Sync</span>
+                    <button onclick={() => setSubDelay(playback.subDelay - 0.1)} aria-label="Subtitles earlier">−</button>
+                    <b class:off={playback.subDelay !== 0}>{playback.subDelay > 0 ? '+' : ''}{playback.subDelay.toFixed(1)}s</b>
+                    <button onclick={() => setSubDelay(playback.subDelay + 0.1)} aria-label="Subtitles later">+</button>
+                    {#if playback.subDelay !== 0}<button class="reset" onclick={() => setSubDelay(0)} title="Reset sync">Reset</button>{/if}
+                  </div>
+                  {#if settings.miniPlayer}<a class="style-link" href="#/settings?tab=playback" onclick={() => setMini(true)}>Style…</a>{/if}
                 </div>
-                <div class="sizer">
-                  <span title="Shift subtitles earlier or later (Z / X)">Sync</span>
-                  <button onclick={() => setSubDelay(playback.subDelay - 0.1)} aria-label="Subtitles earlier">−</button>
-                  <b class:off={playback.subDelay !== 0}>{playback.subDelay > 0 ? '+' : ''}{playback.subDelay.toFixed(1)}s</b>
-                  <button onclick={() => setSubDelay(playback.subDelay + 0.1)} aria-label="Subtitles later">+</button>
-                  {#if playback.subDelay !== 0}<button class="reset" onclick={() => setSubDelay(0)} title="Reset sync">↺</button>{/if}
-                </div>
-                {#if settings.miniPlayer}<a class="style-link" href="#/settings?tab=playback" onclick={() => setMini(true)}>Subtitle style…</a>{/if}
-              {:else}
-                <div class="none">{live ? 'This channel has no subtitles or captions.' : 'No subtitles in this stream. Add languages in Settings → Playback to fetch them from subtitle addons.'}</div>
               {/if}
             </div>
           {/if}
         </div>
 
         <div class="menu-wrap">
-          <button class="ctl" class:on={menu === 'more' || stats} onclick={() => (menu = menu === 'more' ? '' : 'more')} title="More"><Icon name="dots" size={20} /></button>
+          <button class="ctl" class:on={menu === 'more' || stats} onclick={() => toggleMenu('more')} title="More" aria-expanded={menu === 'more'}><Icon name="dots" size={20} /></button>
           {#if menu === 'more'}
-            <div class="menu">
+            <div class="pmenu more" role="dialog" aria-label="More options">
               {#if !live}
-                <div class="mh">Picture <span class="key">A</span></div>
-                <div class="seg3">
+                <div class="phead"><Icon name="picture" size={15} /><span>Picture</span><span class="key">A</span></div>
+                <div class="chips three">
                   {#each ['fit', 'fill', 'stretch'] as a (a)}
                     <button class:sel={settings.videoAspect === a} onclick={() => (settings.videoAspect = a as Aspect)}>{ASPECT_LABEL[a as Aspect].replace(' (crop)', '')}</button>
                   {/each}
                 </div>
               {/if}
-              <div class="sizer">
-                <span title="Shift audio earlier or later (Shift+Z / Shift+X)">Audio sync</span>
+              <div class="phead"><Icon name="audio" size={15} /><span>Audio sync</span><span class="key">⇧Z / ⇧X</span></div>
+              <div class="step wide">
                 <button onclick={() => setAudioDelay(playback.audioDelay - 0.1)} aria-label="Audio earlier">−</button>
                 <b class:off={playback.audioDelay !== 0}>{playback.audioDelay > 0 ? '+' : ''}{playback.audioDelay.toFixed(1)}s</b>
                 <button onclick={() => setAudioDelay(playback.audioDelay + 0.1)} aria-label="Audio later">+</button>
-                {#if playback.audioDelay !== 0}<button class="reset" onclick={() => setAudioDelay(0)} title="Reset sync">↺</button>{/if}
+                <button class="reset" disabled={playback.audioDelay === 0} onclick={() => setAudioDelay(0)}>Reset</button>
               </div>
-              <button onclick={() => { menu = ''; void snap(); }}>Take screenshot <span class="key">P</span></button>
-              <button class:sel={stats} onclick={() => { stats = !stats; menu = ''; }}>Stats for nerds <span class="key">I</span></button>
+              <div class="sep"></div>
+              <button class="row" onclick={() => { menu = ''; void snap(); }}><Icon name="camera" size={17} /><span>Take screenshot</span><span class="key">P</span></button>
+              <button class="row" class:sel={stats} onclick={() => { stats = !stats; menu = ''; }}><Icon name="info" size={17} /><span>Stats for nerds</span><span class="key">I</span></button>
+              <button class="row" onclick={() => { help = true; menu = ''; }}><Icon name="keyboard" size={17} /><span>Keyboard shortcuts</span><span class="key">?</span></button>
+              <button class="row" onclick={() => { menu = ''; openStudio('player'); }}><Icon name="sliders" size={17} /><span>Player settings…</span></button>
             </div>
           {/if}
         </div>
@@ -824,7 +931,7 @@
   .chlogo { position: absolute; left: 50%; top: 50%; width: min(220px, 30vw); max-height: 30vh; object-fit: contain; transform: translate(-50%, -50%); opacity: 0.35; }
   .livebar { padding: 14px 0 6px; }
   .livebar .track { height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.22); overflow: hidden; }
-  .livebar .fill { height: 100%; background: var(--accent); }
+  .livebar .fill { height: 100%; background: var(--player-accent); }
   .livepill {
     display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 4px 9px; margin-left: 6px;
     background: rgb(255 255 255 / 0.12); color: #fff; font: 800 11.5px var(--font); letter-spacing: 0.08em; text-transform: uppercase; cursor: default;
@@ -844,7 +951,7 @@
   .glist { overflow-y: auto; flex: 1; padding: 6px; }
   .gch { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: #fff; text-align: left; padding: 7px 8px; border-radius: 9px; cursor: pointer; }
   .gch:hover { background: rgb(255 255 255 / 0.08); }
-  .gch.sel { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .gch.sel { background: color-mix(in srgb, var(--player-accent) 30%, transparent); }
   .glogo { width: 44px; height: 28px; flex-shrink: 0; border-radius: 5px; background: rgb(255 255 255 / 0.08); display: grid; place-items: center; overflow: hidden; }
   .glogo img { max-width: 90%; max-height: 90%; object-fit: contain; }
   .gtxt { min-width: 0; display: flex; flex-direction: column; }
@@ -878,11 +985,17 @@
   .bar { position: relative; height: 22px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
   .track { position: relative; width: 100%; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.22); overflow: hidden; transition: height 120ms; }
   .bar:hover .track { height: 6px; }
+  :global(:root[data-seekbar='thick']) .track { height: 7px; border-radius: 4px; }
+  :global(:root[data-seekbar='thick']) .bar:hover .track { height: 10px; }
+  :global(:root[data-seekbar='thick']) .knob { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  :global(:root[data-pctl='large']) .controls .ctl { width: 48px; height: 48px; }
+  :global(:root[data-pctl='large']) .controls .ctl.big { width: 56px; height: 56px; }
+  :global(:root[data-pctl='large']) .controls :global(svg) { transform: scale(1.15); }
   .buf { position: absolute; inset: 0 auto 0 0; background: rgb(255 255 255 / 0.35); }
-  .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+  .fill { position: absolute; inset: 0 auto 0 0; background: var(--player-accent); }
   .knob {
     position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 0 3px rgb(0 0 0 / 0.25); transform: scale(0); transition: transform 120ms;
+    background: var(--player-accent); box-shadow: 0 0 0 3px rgb(0 0 0 / 0.25); transform: scale(0); transition: transform 120ms;
   }
   .bar:hover .knob { transform: scale(1); }
   .tip {
@@ -892,12 +1005,6 @@
   }
   .tchap { font-weight: 700; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
   .chap { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgb(0 0 0 / 0.55); }
-  .seg3 { display: flex; gap: 4px; padding: 2px 6px 8px; }
-  .seg3 button { flex: 1; border: 0; border-radius: 7px; padding: 6px 8px; background: rgb(255 255 255 / 0.08); color: #fff; font: 600 12.5px var(--font); cursor: pointer; }
-  .seg3 button:hover { background: rgb(255 255 255 / 0.16); }
-  .seg3 button.sel { background: var(--accent); color: var(--on-accent); }
-  .key { margin-left: auto; padding: 0 6px; border-radius: 4px; background: rgb(255 255 255 / 0.12); font: 700 11px var(--font); color: rgb(255 255 255 / 0.7); }
-  .mh .key { margin-left: 6px; }
   .stats {
     position: absolute; left: 16px; top: 76px; z-index: 3; width: min(420px, calc(100% - 32px)); padding: 10px 14px 12px;
     background: rgb(10 10 14 / 0.86); border: 1px solid rgb(255 255 255 / 0.1); border-radius: 12px; backdrop-filter: blur(12px);
@@ -916,10 +1023,10 @@
     background: transparent; color: rgb(255 255 255 / 0.92); cursor: pointer; transition: background 120ms, color 120ms;
   }
   .ctl:hover { background: rgb(255 255 255 / 0.14); color: #fff; }
-  .ctl.on { color: var(--accent); }
+  .ctl.on { color: var(--player-accent); }
   .ctl:disabled { opacity: 0.35; cursor: default; background: none; }
   .ctl.big { width: 46px; height: 46px; }
-  .badge { position: absolute; bottom: 2px; right: 0; font-size: 9.5px; padding: 0 3px; border-radius: 4px; background: var(--accent); color: var(--on-accent); }
+  .badge { position: absolute; bottom: 2px; right: 0; font-size: 9.5px; padding: 0 3px; border-radius: 4px; background: var(--player-accent); color: var(--on-accent); }
   .time { border: 0; background: none; color: #fff; cursor: pointer; padding: 6px 8px; border-radius: 8px; font-family: inherit; }
   .time:hover { background: rgb(255 255 255 / 0.1); }
   .volpill {
@@ -927,7 +1034,7 @@
     padding: 8px 14px; border-radius: 999px; background: rgb(12 12 16 / 0.8); font-size: 13px; font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .vbar { width: 120px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.25); overflow: hidden; }
-  .vbar i { display: block; height: 100%; background: var(--accent); }
+  .vbar i { display: block; height: 100%; background: var(--player-accent); }
   .volpill b { min-width: 44px; text-align: right; }
   .help {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: min(460px, calc(100% - 40px));
@@ -948,28 +1055,124 @@
   .vol:hover input, .vol input:focus-visible { width: 96px; opacity: 1; margin-right: 6px; }
   .vol input::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
 
+
+  /* ---------- player menus ---------- */
   .menu-wrap { position: relative; }
-  .menu {
-    position: absolute; bottom: 48px; right: -6px; min-width: 220px; max-width: 340px; max-height: 50vh; overflow-y: auto;
-    padding: 6px; border-radius: 12px; background: rgb(18 18 22 / 0.94); border: 1px solid rgb(255 255 255 / 0.1);
-    box-shadow: 0 16px 40px rgb(0 0 0 / 0.5); backdrop-filter: blur(12px);
+  .pmenu {
+    --pm-bg: rgb(16 17 22 / 0.78);
+    position: absolute; bottom: 64px; right: -8px; z-index: 4; width: 300px; max-height: min(560px, calc(100vh - 170px));
+    display: flex; flex-direction: column; padding: 8px; border-radius: 16px;
+    background: var(--pm-bg); border: 1px solid rgb(255 255 255 / 0.09);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.05);
+    backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    transform-origin: bottom right; animation: pm-in calc(var(--dur) + 60ms) cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    font-size: 13.5px;
   }
-  .mh { padding: 6px 10px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: rgb(255 255 255 / 0.5); font-weight: 700; }
-  .menu > button {
-    display: block; width: 100%; text-align: left; padding: 8px 10px 8px 28px; border: 0; border-radius: 8px; position: relative;
-    background: none; color: #fff; font-size: 13px; cursor: pointer;
+  :global(:root[data-pmenu='solid']) .pmenu { --pm-bg: rgb(20 21 27); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  @keyframes pm-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
+  .pmenu.tracks { width: 320px; }
+  .pmenu.tracks.two { width: min(620px, calc(100vw - 40px)); }
+  .pmenu.speed { width: 290px; }
+  .pmenu.more { width: 290px; }
+
+  .phead {
+    display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px; min-height: 38px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgb(255 255 255 / 0.55);
   }
-  .menu > button:hover { background: rgb(255 255 255 / 0.1); }
-  .menu > button:has(.key) { display: flex; align-items: center; }
-  .menu > button.sel::before { content: ''; position: absolute; left: 11px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--accent); }
-  .sizer { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid rgb(255 255 255 / 0.1); font-size: 12.5px; }
-  .sizer span { flex: 1; color: rgb(255 255 255 / 0.6); }
-  .sizer button { border: 0; border-radius: 6px; padding: 4px 9px; background: rgb(255 255 255 / 0.1); color: #fff; cursor: pointer; font-weight: 700; }
-  .sizer b { min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; }
-  .sizer b.off { color: var(--accent); }
-  .sizer .reset { padding: 4px 7px; font-weight: 600; }
-  .style-link { display: block; padding: 8px 10px 4px; font-size: 12.5px; color: var(--accent); text-decoration: none; }
+  .phead :global(svg) { flex-shrink: 0; opacity: 0.8; }
+  .phead span:not(.key) { flex: 1; }
+  .phead .val { text-transform: none; letter-spacing: 0; font-size: 13px; color: #fff; }
+  .key {
+    margin-left: auto; padding: 1px 6px; border-radius: 5px; background: rgb(255 255 255 / 0.1);
+    font: 600 11px var(--font); letter-spacing: 0; text-transform: none; color: rgb(255 255 255 / 0.6); white-space: nowrap;
+  }
+
+  .cols { display: flex; min-height: 0; flex: 1; }
+  .col { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  .two .col + .col { border-left: 1px solid rgb(255 255 255 / 0.08); padding-left: 6px; margin-left: 6px; }
+  .opts { overflow-y: auto; min-height: 0; flex: 1; padding-right: 2px; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.2) transparent; }
+  .opts::-webkit-scrollbar { width: 6px; }
+  .opts::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.18); border: 0; border-radius: 6px; }
+
+  .opt {
+    display: flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 7px 10px; border: 0; border-radius: 10px;
+    background: none; color: #fff; text-align: left; cursor: pointer; font: inherit;
+    transition: background var(--dur);
+  }
+  .opt:hover { background: rgb(255 255 255 / 0.08); }
+  .opt:focus-visible { outline: 2px solid var(--player-accent); outline-offset: -2px; }
+  .opt.sel { background: color-mix(in srgb, var(--player-accent) 18%, transparent); }
+  .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .txt b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .txt small { font-size: 11.5px; color: rgb(255 255 255 / 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag {
+    flex-shrink: 0; padding: 1px 6px; border-radius: 5px; border: 1px solid rgb(255 255 255 / 0.22);
+    font: 700 10px var(--font); font-style: normal; letter-spacing: 0.04em; text-transform: uppercase; color: rgb(255 255 255 / 0.75);
+  }
+  .tick { display: flex; width: 16px; flex-shrink: 0; color: var(--player-accent); opacity: 0; transform: scale(0.6); transition: opacity var(--dur), transform var(--dur); }
+  .opt.sel .tick { opacity: 1; transform: none; }
+  .divider {
+    margin: 8px 10px 4px; padding-top: 8px; border-top: 1px solid rgb(255 255 255 / 0.08);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgb(255 255 255 / 0.4);
+  }
+  .none { padding: 10px 10px 12px; font-size: 12.5px; line-height: 1.45; color: rgb(255 255 255 / 0.6); }
+  .find {
+    flex: 1; min-width: 0; max-width: 150px; margin-left: auto; padding: 5px 9px; border-radius: 8px;
+    border: 1px solid rgb(255 255 255 / 0.12); background: rgb(255 255 255 / 0.06); color: #fff;
+    font: 500 12px var(--font); text-transform: none; letter-spacing: 0; outline: none;
+  }
+  .find:focus { border-color: var(--player-accent); }
+  .find::placeholder { color: rgb(255 255 255 / 0.4); }
+
+  .pfoot {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; padding: 10px 8px 2px;
+    border-top: 1px solid rgb(255 255 255 / 0.08);
+  }
+  .step { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
+  .step > span { color: rgb(255 255 255 / 0.55); margin-right: 4px; }
+  .step button {
+    min-width: 28px; height: 28px; padding: 0 8px; border: 0; border-radius: 8px; cursor: pointer;
+    background: rgb(255 255 255 / 0.09); color: #fff; font: 700 14px var(--font); transition: background var(--dur);
+  }
+  .step button:hover:not(:disabled) { background: rgb(255 255 255 / 0.18); }
+  .step button:disabled { opacity: 0.35; cursor: default; }
+  .step .reset { font-size: 12px; font-weight: 600; }
+  .step b { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .step b.off { color: var(--player-accent); }
+  .step.wide { padding: 0 8px 6px; }
+  .step.wide .reset { margin-left: auto; }
+  .style-link { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--player-accent); text-decoration: none; }
   .style-link:hover { text-decoration: underline; }
+
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 0 6px 8px; }
+  .chips.three { grid-template-columns: repeat(3, 1fr); }
+  .chips button {
+    height: 34px; border: 0; border-radius: 9px; cursor: pointer; background: rgb(255 255 255 / 0.08); color: #fff;
+    font: 600 12.5px var(--font); font-variant-numeric: tabular-nums; transition: background var(--dur), color var(--dur);
+  }
+  .chips button:hover { background: rgb(255 255 255 / 0.16); }
+  .chips button.sel { background: var(--player-accent); color: var(--on-accent); }
+  .fine { display: block; padding: 4px 10px 8px; }
+  .fine input {
+    width: 100%; height: 4px; appearance: none; border-radius: 2px; cursor: pointer;
+    background: linear-gradient(90deg, var(--player-accent) var(--v), rgb(255 255 255 / 0.2) var(--v));
+  }
+  .fine input::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5); }
+
+  .sep { height: 1px; margin: 4px 6px; background: rgb(255 255 255 / 0.08); }
+  .row {
+    display: flex; align-items: center; gap: 11px; width: 100%; height: 40px; padding: 0 10px; border: 0; border-radius: 10px;
+    background: none; color: #fff; cursor: pointer; font: inherit; text-align: left; transition: background var(--dur);
+  }
+  .row:hover { background: rgb(255 255 255 / 0.08); }
+  .row :global(svg) { opacity: 0.8; flex-shrink: 0; }
+  .row span:not(.key) { flex: 1; }
+  .row.sel { color: var(--player-accent); }
+
+  .skipn { position: relative; }
+  .skipn span { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 1px; font: 800 8.5px var(--font); pointer-events: none; }
+  .ends { margin-left: 10px; font-size: 12.5px; color: rgb(255 255 255 / 0.55); white-space: nowrap; }
+  @media (max-width: 760px) { .ends { display: none; } }
 
   /* Skip intro / recap */
   .skip {
@@ -993,7 +1196,7 @@
   .nthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .ringcd { position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px; transform: rotate(-90deg); }
   .ringcd circle { fill: rgb(0 0 0 / 0.55); stroke: rgb(255 255 255 / 0.25); stroke-width: 3; }
-  .ringcd .fg { fill: none; stroke: var(--accent); stroke-dasharray: 97.4; transition: stroke-dashoffset 1s linear; }
+  .ringcd .fg { fill: none; stroke: var(--player-accent); stroke-dasharray: 97.4; transition: stroke-dashoffset 1s linear; }
   .ninfo { min-width: 0; display: flex; flex-direction: column; gap: 3px; justify-content: center; }
   .nlabel { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: rgb(255 255 255 / 0.6); font-weight: 700; }
   .ntitle { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1010,9 +1213,9 @@
   .mini-ttl span { font-weight: 500; color: rgb(255 255 255 / 0.7); margin-left: 6px; }
   .mini-mid { align-self: center; display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
   .ctl.s { width: 32px; height: 32px; }
-  .mini-next { position: absolute; right: 8px; bottom: 12px; border: 0; border-radius: 7px; padding: 5px 10px; background: var(--accent); color: var(--on-accent); font: 700 12px var(--font); cursor: pointer; opacity: 1; }
+  .mini-next { position: absolute; right: 8px; bottom: 12px; border: 0; border-radius: 7px; padding: 5px 10px; background: var(--player-accent); color: var(--on-accent); font: 700 12px var(--font); cursor: pointer; opacity: 1; }
   .mini-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgb(255 255 255 / 0.2); }
-  .mini-bar div { height: 100%; background: var(--accent); }
+  .mini-bar div { height: 100%; background: var(--player-accent); }
   .ring.sm { width: 30px; height: 30px; }
   .none { padding: 6px 10px 8px; font-size: 12.5px; color: rgb(255 255 255 / 0.6); line-height: 1.45; }
 
@@ -1020,7 +1223,7 @@
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column;
     align-items: center; gap: 10px; pointer-events: none; font-size: 13px; font-weight: 600; text-shadow: 0 1px 6px rgb(0 0 0 / 0.6);
   }
-  .ring { width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgb(255 255 255 / 0.2); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+  .ring { width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgb(255 255 255 / 0.2); border-top-color: var(--player-accent); animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .flash {
     width: 76px; height: 76px; justify-content: center; border-radius: 50%; background: rgb(0 0 0 / 0.5);

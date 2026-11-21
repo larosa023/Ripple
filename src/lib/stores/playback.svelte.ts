@@ -1,6 +1,7 @@
 // State and controls for the built-in player (mpv embedded in Ripple's window).
 import { invoke, stopTorrents, type Prepared } from '../player';
 import { isTauri } from '../stremio/http';
+import { baseLang, langName, sameLang } from '../lang';
 import type { MetaDetail, SourcedStream, Video } from '../stremio/types';
 import { fromAniSkip, fromChapters, mergeSegments, type Chapter, type Segment } from '../skip';
 import { recordPlay, resumePoint, saveProgress } from './library.svelte';
@@ -21,7 +22,10 @@ export interface Track {
   lang?: string;
   codec?: string;
   external?: boolean;
+  'external-filename'?: string;
   default?: boolean;
+  forced?: boolean;
+  'hearing-impaired'?: boolean;
   'demux-channel-count'?: number;
 }
 
@@ -344,7 +348,8 @@ export function applySubStyle() {
   if (s.subStyle === 'box') {
     // background-box is mpv 0.38+, opaque-box older; sub-back-color alone works on 0.37.
     setProp('sub-border-style', 'background-box').then((r) => r === undefined && setProp('sub-border-style', 'opaque-box'));
-    setProp('sub-back-color', '#B0000000');
+    const a = Math.round(Math.min(1, Math.max(0, s.subBack ?? 0.7)) * 255).toString(16).padStart(2, '0').toUpperCase();
+    setProp('sub-back-color', `#${a}000000`);
     setProp('sub-border-size', 0);
     setProp('sub-shadow-offset', 0);
   } else {
@@ -397,21 +402,29 @@ export async function screenshot(withSubs = false): Promise<string | null> {
 
 const episodic = () => !!playback.meta && playback.meta.type !== 'movie';
 
+/** A track's language, including addon subtitles (whose language mpv can't see). */
+export function trackLang(t: Track): string {
+  if (t.external) {
+    const info = playback.source?.subInfo?.find((s) => s.url === t['external-filename']);
+    if (info?.lang) return info.lang;
+  }
+  return t.lang ?? '';
+}
+
 /** Picks the audio and subtitle tracks you used last time for this show. */
 function applyShowTracks() {
   if (tracksApplied || !playback.active || !playback.tracks.length) return;
   tracksApplied = true;
   const pref = settings.rememberPerShow && episodic() && playback.meta ? shows[playback.meta.id] : undefined;
   if (!pref) return;
-  const norm = (l?: string) => (l ?? '').toLowerCase();
   if (pref.audioLang) {
-    const a = playback.tracks.find((t) => t.type === 'audio' && norm(t.lang) === pref.audioLang);
+    const a = playback.tracks.find((t) => t.type === 'audio' && sameLang(trackLang(t), pref.audioLang));
     if (a && a.id !== playback.aid) setAudio(a.id);
   }
   if (pref.subLang === 'off') {
     if (playback.sid !== false) setSub(false);
   } else if (pref.subLang) {
-    const subs = playback.tracks.filter((t) => t.type === 'sub' && norm(t.lang) === pref.subLang);
+    const subs = playback.tracks.filter((t) => t.type === 'sub' && sameLang(trackLang(t), pref.subLang));
     const pick = subs.find((t) => (t.title ?? '') === (pref.subTitle ?? '')) ?? subs[0];
     if (pick && pick.id !== playback.sid) setSub(pick.id);
   }
@@ -420,13 +433,13 @@ function applyShowTracks() {
 /** Track choices made in the player menus; remembered for the show. */
 export function chooseAudio(t: Track) {
   setAudio(t.id);
-  if (settings.rememberPerShow && episodic() && playback.meta) rememberShow(playback.meta.id, { audioLang: (t.lang ?? '').toLowerCase() || undefined });
+  if (settings.rememberPerShow && episodic() && playback.meta) rememberShow(playback.meta.id, { audioLang: trackLang(t).toLowerCase() || undefined });
 }
 
 export function chooseSub(t: Track | null) {
   setSub(t ? t.id : false);
   if (settings.rememberPerShow && episodic() && playback.meta) {
-    rememberShow(playback.meta.id, t ? { subLang: (t.lang ?? '').toLowerCase() || undefined, subTitle: t.title ?? '' } : { subLang: 'off', subTitle: '' });
+    rememberShow(playback.meta.id, t ? { subLang: trackLang(t).toLowerCase() || undefined, subTitle: t.title ?? '' } : { subLang: 'off', subTitle: '' });
   }
 }
 
@@ -551,24 +564,108 @@ export const toggleFullscreen = () => setFullscreen(!playback.fullscreen);
 
 // ---------- labels ----------
 
-const LANGS: Record<string, string> = {
-  eng: 'English', en: 'English', spa: 'Spanish', es: 'Spanish', fre: 'French', fra: 'French', fr: 'French',
-  ger: 'German', deu: 'German', de: 'German', ita: 'Italian', it: 'Italian', por: 'Portuguese', pt: 'Portuguese',
-  jpn: 'Japanese', ja: 'Japanese', kor: 'Korean', ko: 'Korean', chi: 'Chinese', zho: 'Chinese', zh: 'Chinese',
-  rus: 'Russian', ru: 'Russian', ara: 'Arabic', ar: 'Arabic', hin: 'Hindi', hi: 'Hindi', dut: 'Dutch', nld: 'Dutch',
-  pol: 'Polish', tur: 'Turkish', swe: 'Swedish', nor: 'Norwegian', dan: 'Danish', fin: 'Finnish', gre: 'Greek',
-  heb: 'Hebrew', tha: 'Thai', vie: 'Vietnamese', ind: 'Indonesian', ukr: 'Ukrainian', cze: 'Czech', hun: 'Hungarian',
-  rum: 'Romanian', ron: 'Romanian', und: 'Unknown',
-};
+/** A track broken into what a menu shows: the language, a short detail line and small tags. */
+export interface TrackParts {
+  name: string;
+  detail: string;
+  tags: string[];
+  /** Language family, for sorting and matching preferences. */
+  base: string;
+  /** Came from a subtitle addon rather than the video file. */
+  addon: boolean;
+}
 
+const AUDIO_CODECS: Record<string, string> = {
+  eac3: 'Dolby Digital Plus', ac3: 'Dolby Digital', truehd: 'Dolby TrueHD', dts: 'DTS', 'dts-hd': 'DTS-HD', dca: 'DTS',
+  aac: 'AAC', opus: 'Opus', flac: 'FLAC', mp3: 'MP3', vorbis: 'Vorbis', alac: 'ALAC', pcm_s16le: 'PCM', pcm_s24le: 'PCM',
+};
+const SUB_CODECS: Record<string, string> = {
+  subrip: 'SRT', srt: 'SRT', webvtt: 'WebVTT', ass: 'Styled', ssa: 'Styled', mov_text: 'Text',
+  hdmv_pgs_subtitle: 'Image', pgssub: 'Image', dvd_subtitle: 'Image', dvdsub: 'Image', dvb_subtitle: 'Image',
+};
+const TAG_WORDS: [RegExp, string][] = [
+  [/\bforced\b/i, 'Forced'],
+  [/\b(sdh|hearing[- ]impaired)\b/i, 'SDH'],
+  [/\b(cc|closed captions?)\b/i, 'CC'],
+  [/\bcommentary\b/i, 'Commentary'],
+  [/\b(audio description|descriptive|\bad\b)\b/i, 'Described'],
+  [/\bsigns?( ?(&|and) ?songs?)?\b/i, 'Signs'],
+];
+
+function channels(n?: number): string {
+  if (!n) return '';
+  return n === 1 ? 'Mono' : n === 2 ? 'Stereo' : n === 6 ? '5.1' : n === 8 ? '7.1' : `${n} ch`;
+}
+
+/** Strips what the menu already shows (language, tags, brackets) out of a track title. */
+function leftover(title: string, lang: string): string {
+  let t = ` ${title} `;
+  for (const [re] of TAG_WORDS) t = t.replace(new RegExp(re.source, 'gi'), ' ');
+  if (lang) t = t.replace(new RegExp(`\\b${lang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
+  t = t
+    .replace(/[\[\](){}]/g, ' ')
+    .replace(/\s*[-–—|·:,]+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // File names, hashes and ids (the "random numbers" some addons send) say nothing useful.
+  if (/^[\d\s._-]+$/.test(t) || /^[a-f0-9]{8,}$/i.test(t) || /\.(srt|vtt|ass|ssa|sub)$/i.test(t) || /^track ?\d+$/i.test(t)) return '';
+  return t;
+}
+
+export function trackParts(t: Track): TrackParts {
+  const info = t.external ? playback.source?.subInfo?.find((s) => s.url === t['external-filename']) : undefined;
+  const code = trackLang(t);
+  let name = langName(code);
+  const title = (t.title ?? '').trim();
+  const tags: string[] = [];
+  for (const [re, tag] of TAG_WORDS) if (re.test(title) && !tags.includes(tag)) tags.push(tag);
+  if (t.forced && !tags.includes('Forced')) tags.push('Forced');
+  if (t['hearing-impaired'] && !tags.includes('SDH')) tags.push('SDH');
+
+  // Regional names read better as "Portuguese" + "Brazilian" than "Brazilian Portuguese".
+  const base = baseLang(code);
+  let region = '';
+  if (name && base && name.toLowerCase() !== base && name.toLowerCase().endsWith(base)) {
+    region = name.slice(0, name.length - base.length).trim();
+    name = base.charAt(0).toUpperCase() + base.slice(1);
+  }
+  let extra = info ? '' : leftover(title, name);
+  if (region && extra) extra = leftover(extra, region);
+  if (!name) {
+    // No language: fall back to a readable title, else a plain numbered track.
+    name = extra || (t.type === 'audio' ? `Audio ${t.id}` : `Subtitles ${t.id}`);
+    extra = '';
+  }
+
+  const bits: string[] = [];
+  if (region) bits.push(region);
+  if (extra) bits.push(extra);
+  if (t.type === 'audio') {
+    const codec = (t.codec ?? '').toLowerCase();
+    bits.push(AUDIO_CODECS[codec] ?? (codec ? codec.toUpperCase() : ''));
+    bits.push(channels(t['demux-channel-count']));
+  } else if (info) {
+    bits.push(info.source || 'Subtitle addon');
+  } else if (t.external) {
+    bits.push('External file');
+  } else {
+    const c = SUB_CODECS[(t.codec ?? '').toLowerCase()];
+    if (c === 'Image' || c === 'Styled') bits.push(c);
+  }
+  return {
+    name,
+    detail: [...new Set(bits.filter(Boolean))].join(' · '),
+    tags,
+    base: base || name.toLowerCase(),
+    addon: !!info || !!t.external,
+  };
+}
+
+/** One-line label, for toasts and anywhere without room for the full menu row. */
 export function trackLabel(t: Track): string {
-  const lang = t.lang ? (LANGS[t.lang.toLowerCase()] ?? t.lang.toUpperCase()) : '';
-  const ch = t['demux-channel-count'];
-  const extra = [t.codec?.toUpperCase(), ch ? (ch === 6 ? '5.1' : ch === 8 ? '7.1' : ch === 2 ? 'Stereo' : `${ch}ch`) : '']
-    .filter(Boolean)
-    .join(' · ');
-  const name = [lang, t.title && t.title !== lang ? t.title : ''].filter(Boolean).join(' — ') || `Track ${t.id}`;
-  return extra && t.type === 'audio' ? `${name} (${extra})` : t.external ? `${name} (addon)` : name;
+  const p = trackParts(t);
+  const more = [p.detail, ...p.tags].filter(Boolean).join(', ');
+  return more ? `${p.name} (${more})` : p.name;
 }
 
 export function fmtTime(s: number): string {

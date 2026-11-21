@@ -245,14 +245,15 @@ export function getStreams(
   ).then(() => undefined);
 }
 
-export async function getSubtitles(addons: InstalledAddon[], type: string, id: string): Promise<Subtitle[]> {
+/** Subtitles from every subtitle addon, each tagged with the addon it came from. */
+export async function getSubtitles(addons: InstalledAddon[], type: string, id: string): Promise<(Subtitle & { addon: string })[]> {
   const sources = addons.filter((a) => a.enabled && supports(a, 'subtitles', type, id));
   const results = await Promise.allSettled(
     sources.map((a) => {
       const url = resourceUrl(a, 'subtitles', type, id);
       return cached(url, 30 * 60_000, () =>
         getJson<{ subtitles?: Subtitle[] }>(url, requestTimeout).then((r) => r.subtitles ?? []),
-      );
+      ).then((list) => list.map((s) => ({ ...s, addon: a.manifest.name })));
     }),
   );
   return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));

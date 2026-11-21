@@ -27,11 +27,13 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Discover** with type tabs, catalog picker, genre filter, and infinite scroll.
 - **Search** across every searchable catalog at once, with results streaming in as each addon answers.
 - **Smart stream list.** Streams appear as each addon responds, with quality, size, and HDR/DV/REMUX/cached tags. Sort by quality, size, or addon order; filter by quality, hide CAM releases, hide keywords, or show direct links only. Per-addon filter pills.
-- **Built-in player.** Videos play inside Ripple (powered by mpv, so MKV, HEVC, HDR and surround audio all work) with Ripple's own controls: seek bar with buffer, audio and subtitle track menus, subtitle size, speed, fullscreen, keyboard shortcuts, and resume where you left off. Subtitles from subtitle addons in your languages are added automatically.
+- **Built-in player.** Videos play inside Ripple (powered by mpv, so MKV, HEVC, HDR and surround audio all work) with Ripple's own controls: seek bar with buffer, one clean Audio & subtitles panel (real language names, addon names instead of file ids, SDH / Forced / Commentary tags, your languages first, a search box for long lists), subtitle size, speed with a fine slider, fullscreen, keyboard shortcuts, and resume where you left off. Subtitles from subtitle addons in your languages are added automatically.
 - **Binge mode.** A "Next episode" card near the credits with a countdown, using the same release (bingeGroup), addon and quality you were watching. Skip intro / recap buttons from the file's chapters and AniSkip (anime), or auto-skip.
 - **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
 - **Player extras**: chapter marks on the seek bar, Fit / Fill / Stretch picture (remembered), audio sync, screenshots to Pictures › Ripple, and a "stats for nerds" panel (resolution, HDR, codecs, bitrate, buffer, dropped frames).
-- **Subtitle styling**: font, size, color, outline / shadow / box, position, and a sync offset (`Z`/`X`) in the player.
+- **Player customization** (Customize → Player, also from the player's ⋯ menu, live over the video): player accent color, thin or thick seek bar, regular or large buttons, see-through or solid menus, skip-button and arrow-key amounts, scroll wheel (volume / seek / nothing), double-click (fullscreen / seek sides / nothing), how fast controls hide, and an "Ends at" time.
+- **More look options**: animation speed, thin or hidden scrollbars, and 12- or 24-hour clock.
+- **Subtitle styling**: font, size, color, outline / shadow / box (with adjustable opacity), position, and a sync offset (`Z`/`X`) in the player.
 - **Mini player** (optional): shrink the video to a corner and keep browsing.
 - **Built-in torrent streaming.** P2P (torrent) streams play directly, with no Stremio Service needed: Ripple downloads only the file you're watching, prioritises what's about to play, shows peers and speed while it buffers, and deletes everything when you stop. (Prefer a Stremio streaming server? Switch in Settings → Playback.)
 - **Opens instantly.** Home rows and title pages are kept on disk and shown immediately on launch while fresh copies load in the background.
@@ -45,7 +47,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Feels like a desktop app**: reopens at the same size and position, opening it again focuses the running window, Back returns you to where you were scrolled, and mouse Back/Forward buttons work everywhere (Back also closes the player).
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
-- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `Shift+Z/X` audio sync, `A` fit/fill/stretch, `P` screenshot, `I` stats, `?` all shortcuts, scroll wheel for volume, click the clock for time remaining, `Esc` back.
+- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`Shift` for 3×, `J/L` 10s; both adjustable), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `Shift+Z/X` audio sync, `A` fit/fill/stretch, `P` screenshot, `I` stats, `?` all shortcuts, scroll wheel for volume, click the clock for time remaining, `Esc` back.
 
 ## Install
 

@@ -304,7 +304,7 @@
                   style:font-weight={settings.subBold ? 700 : 500}
                   style:font-size="{Math.round(22 * settings.subScale)}px"
                   style:text-shadow={subShadow}
-                  style:background={settings.subStyle === 'box' ? 'rgb(0 0 0 / 0.7)' : 'transparent'}
+                  style:background={settings.subStyle === 'box' ? `rgb(0 0 0 / ${settings.subBack})` : 'transparent'}
                   style:bottom="{Math.max(6, (100 - settings.subPos) * 1.4 + 12)}px"
                 >The quick brown fox jumps over the lazy dog</span>
               </div>
@@ -333,6 +333,11 @@
                 <label>Position
                   <span class="range"><input type="range" min="70" max="100" step="1" bind:value={settings.subPos} /><b>{settings.subPos === 100 ? 'Bottom' : `${100 - settings.subPos}% up`}</b></span>
                 </label>
+                {#if settings.subStyle === 'box'}
+                  <label>Box opacity
+                    <span class="range"><input type="range" min="0.2" max="1" step="0.05" bind:value={settings.subBack} /><b>{Math.round(settings.subBack * 100)}%</b></span>
+                  </label>
+                {/if}
                 <label class="checks">
                   <span><input type="checkbox" bind:checked={settings.subBold} /> Bold</span>
                   <span title="Also restyle subtitles that come with their own fonts and colors (common for anime). Signs and karaoke may look off."><input type="checkbox" bind:checked={settings.subOverride} /> Override styled subtitles</span>
@@ -342,7 +347,7 @@
           </div>
 
           <div class="group">
-            <SettingRow title="Subtitle languages" description="Comma-separated 3-letter codes, in order of preference (eng, spa, fre…).">
+            <SettingRow title="Subtitle languages" description="Comma-separated language codes, in order of preference (eng, spa, fre…). Ripple fetches up to 4 subtitles per language from your subtitle addons, and lists these languages first in the player.">
               <input class="input short" bind:value={settings.subtitleLangs} placeholder="eng" spellcheck="false" />
             </SettingRow>
             <SettingRow title="Auto-play top stream" description="Start playing the best stream as soon as every addon has answered.">

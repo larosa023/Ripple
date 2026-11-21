@@ -1,5 +1,5 @@
 // Transient UI state (not persisted).
-export type StudioTab = 'look' | 'layout' | 'home' | 'code' | 'themes';
+export type StudioTab = 'look' | 'layout' | 'home' | 'player' | 'code' | 'themes';
 
 export const ui: { studioOpen: boolean; studioTab: StudioTab } = $state({ studioOpen: false, studioTab: 'look' });
 

@@ -46,6 +46,9 @@ img { display: block; }
 /* Theme switches crossfade via the View Transitions API (see theme/look.svelte.ts). */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 260ms; animation-timing-function: ease; }
 ::-webkit-scrollbar-track { background: transparent; }
+:root[data-scroll='thin'] ::-webkit-scrollbar { width: 6px; height: 6px; }
+:root[data-scroll='thin'] ::-webkit-scrollbar-thumb { border-width: 1px; }
+:root[data-scroll='hidden'] ::-webkit-scrollbar { width: 0; height: 0; }
 
 /* Shared controls */
 .btn {
@@ -154,7 +157,9 @@ input[type='checkbox']:checked::after { transform: rotate(-45deg) translate(1px,
 /* While a video plays, mpv draws behind the (transparent) page; hide the app
    so only the player controls sit on top of the picture. */
 html.playing, html.playing body { background: transparent !important; }
-html.playing #app > :not(.player):not(.toasts) { visibility: hidden; }
+html.playing #app > :not(.player):not(.toasts):not(.studio.open) { visibility: hidden; }
+/* Customize can open over the player, so player tweaks show live on the picture. */
+html.playing:not(.mini) #app > .studio.open { visibility: visible; }
 
 /* Mini player: show the app again, but cut a hole where the video plays. */
 html.playing.mini #app > :not(.player):not(.toasts) { visibility: visible; clip-path: var(--mini-clip); }

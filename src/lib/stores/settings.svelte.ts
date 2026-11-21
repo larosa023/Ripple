@@ -54,6 +54,20 @@ export interface Settings {
   miniPlayer: boolean;
   /** Player clock shows time remaining instead of total length. */
   showRemaining: boolean;
+  /** Seconds the skip buttons and J / L jump. */
+  seekStep: number;
+  /** Seconds the arrow keys jump (Shift jumps 3× as far). */
+  arrowStep: number;
+  /** Seconds without moving the mouse before the player controls hide. */
+  hideDelay: number;
+  /** What the scroll wheel does over the video. */
+  wheelAction: 'volume' | 'seek' | 'off';
+  /** What double-clicking the video does. */
+  dblClick: 'fullscreen' | 'seek' | 'off';
+  /** "Ends at 10:42 PM" next to the player clock. */
+  showEndsAt: boolean;
+  /** 12 or 24 hour times across the app. */
+  clock: 'auto' | '12h' | '24h';
   // Subtitle look
   subFont: string;
   subScale: number;
@@ -62,6 +76,8 @@ export interface Settings {
   /** Vertical position, 100 = bottom edge (mpv sub-pos). */
   subPos: number;
   subBold: boolean;
+  /** Background opacity for the Box style, 0..1. */
+  subBack: number;
   /** Apply the style to styled (ASS) subtitles too; can break anime signs. */
   subOverride: boolean;
   // Streams
@@ -108,12 +124,20 @@ export const DEFAULT_SETTINGS: Settings = {
   rememberPerShow: true,
   miniPlayer: true,
   showRemaining: false,
+  seekStep: 10,
+  arrowStep: 5,
+  hideDelay: 2.5,
+  wheelAction: 'volume',
+  dblClick: 'fullscreen',
+  showEndsAt: true,
+  clock: 'auto',
   subFont: '',
   subScale: 1,
   subColor: '#ffffff',
   subStyle: 'outline',
   subPos: 100,
   subBold: false,
+  subBack: 0.7,
   subOverride: false,
   streamSort: 'quality',
   hideCam: true,
@@ -138,6 +162,18 @@ $effect.root(() => {
 
 export function resetSettings() {
   Object.assign(settings, structuredClone(DEFAULT_SETTINGS));
+}
+
+const CLOCKS = new Map<string, Intl.DateTimeFormat>();
+/** Formats a time of day the way you chose (12 / 24 hour), e.g. "9:41 PM" or "21:41". */
+export function clockTime(t: number | Date): string {
+  const key = settings.clock;
+  let f = CLOCKS.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', ...(key === 'auto' ? {} : { hour12: key === '12h' }) });
+    CLOCKS.set(key, f);
+  }
+  return f.format(t);
 }
 
 /** Splits user-entered player arguments, respecting double quotes. */

@@ -1,5 +1,6 @@
 import { isTauri } from './stremio/http';
 import { getSubtitles } from './stremio/client';
+import { sameLang } from './lang';
 import { describe, playableUrl } from './stremio/streams';
 import { resolveDebrid } from './resolve';
 import { dismiss, toast } from './stores/toast.svelte';
@@ -57,9 +58,19 @@ export interface PlayContext {
   addons: InstalledAddon[];
 }
 
+/** Where an extra subtitle file came from, so the player can name it properly. */
+export interface SubInfo {
+  url: string;
+  lang: string;
+  /** Addon (or stream) name. */
+  source: string;
+}
+
 export interface Prepared {
   url: string;
   subtitles: string[];
+  /** Details for each entry in `subtitles`. */
+  subInfo?: SubInfo[];
   headers: [string, string][];
   /** Info hash when the built-in torrent engine is streaming this. */
   torrent?: string;
@@ -149,23 +160,27 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
 
   const langs = settings.subtitleLangs
     .split(',')
-    .map((l) => l.trim().toLowerCase())
+    .map((l) => l.trim())
     .filter(Boolean);
-  let subtitles = (stream.subtitles ?? []).map((s) => s.url);
+  const subInfo: SubInfo[] = (stream.subtitles ?? [])
+    .filter((s) => s?.url)
+    .map((s) => ({ url: s.url, lang: s.lang ?? '', source: stream.addonName }));
   if (langs.length) {
     try {
       const extra = await getSubtitles(ctx.addons, ctx.type, ctx.videoId);
-      subtitles = subtitles.concat(
+      // A few per language (best first, as the addon ranked them), in the order you listed them.
+      for (const l of langs) {
         extra
-          .filter((s) => s?.url && langs.includes((s.lang ?? '').toLowerCase()))
-          .slice(0, 6)
-          .map((s) => s.url),
-      );
+          .filter((s) => s?.url && sameLang(s.lang, l) && !subInfo.some((x) => x.url === s.url))
+          .slice(0, 4)
+          .forEach((s) => subInfo.push({ url: s.url, lang: s.lang, source: s.addon }));
+      }
     } catch {
       /* subtitles are best-effort */
     }
   }
-  return { url, subtitles, headers, torrent };
+  const subtitles = subInfo.map((s) => s.url);
+  return { url, subtitles, subInfo, headers, torrent };
 }
 
 /** Plays a prepared stream in the configured external player. */
