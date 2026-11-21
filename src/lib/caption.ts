@@ -23,6 +23,8 @@ interface Job {
   added: boolean;
   /** Ticks in a row that showed a different audio track than the job was made for. */
   audioMiss: number;
+  /** Ticks in a row the added track wasn't in mpv's track list. */
+  missing: number;
   timer?: ReturnType<typeof setInterval>;
   lastTime: number;
 }
@@ -86,9 +88,11 @@ export async function startCaption(p: Prepared, startSeconds: number, title: str
     if (created) void call('DELETE', `/jobs/${created.id}`);
     return;
   }
-  job = { id: created.id, srt: created.srt, token: my, audio: audioIndex(), version: 0, added: false, audioMiss: 0, lastTime: playback.time };
-  // Let the subtitle menu name it.
-  p.subInfo = [...(p.subInfo ?? []), { url: created.srt, lang: wantedLang(), source: CAPTION_SOURCE }];
+  job = { id: created.id, srt: created.srt, token: my, audio: audioIndex(), version: 0, added: false, audioMiss: 0, missing: 0, lastTime: playback.time || 0 };
+  // Let the subtitle menu name it (the store may hold its own copy of the source).
+  const info = { url: created.srt, lang: wantedLang(), source: CAPTION_SOURCE };
+  for (const src of new Set([p, playback.source].filter(Boolean) as Prepared[]))
+    if (!src.subInfo?.some((s) => s.url === info.url)) src.subInfo = [...(src.subInfo ?? []), info];
   job.timer = setInterval(() => void tick(p, title), 2500);
   void tick(p, title);
 }
@@ -103,36 +107,51 @@ async function tick(p: Prepared, title: string) {
   const audioChanged = playback.aid !== false && playback.tracks.length > 0 && audioIndex() !== j.audio;
   j.audioMiss = audioChanged ? j.audioMiss + 1 : 0;
   if (j.audioMiss >= 2) {
-    const old = captionTrack();
-    if (old) await mpv('sub-remove', old.id);
-    await startCaption(p, playback.time, title);
-    return;
+    // Caption starts over on the new track but keeps the same subtitle address, so the track you
+    // have selected stays and just fills in again.
+    j.audioMiss = 0;
+    j.audio = audioIndex();
+    await call('POST', `/jobs/${j.id}/audio`, { audioIndex: j.audio });
   }
 
-  // Tell Caption where playback is (it follows seeks and stays a few minutes ahead).
-  const r = await call<{ doneUntil: number; version: number }>('POST', `/jobs/${j.id}/position`, { position: playback.time });
+  // Tell Caption where playback is (it follows seeks and stays a few minutes ahead). Skip the stray 0
+  // mpv reports while a stream reloads.
+  const t = playback.time || 0;
+  if (t < 1 && j.lastTime > 5) return;
+  const r = await call<{ doneUntil: number; version: number }>('POST', `/jobs/${j.id}/position`, { position: t });
   if (!r || job !== j) return;
-  j.lastTime = playback.time;
-  if (r.version === j.version) return;
-  j.version = r.version;
+  j.lastTime = t;
 
   const track = captionTrack();
+  if (!track && j.added && ++j.missing < 3) return; // mpv may not have listed it yet
+  if (r.version === j.version && (track || !j.added)) return;
+  j.version = r.version;
+
   if (!track) {
-    // First subtitles are ready: add the track. Turn it on unless you've picked other subtitles.
-    if (j.added) return;
+    // First subtitles are ready (or the track went missing): add it. Turn it on unless you've
+    // picked other subtitles.
+    const select = !j.added ? settings.captionAutoOn && playback.sid === false : false;
     j.added = true;
-    const select = settings.captionAutoOn && playback.sid === false;
-    await mpv('sub-add', j.srt, select ? 'select' : 'auto', 'AI subtitles', wantedLang());
+    j.missing = 0;
+    await mpv('sub-add', j.srt, select ? 'select' : 'auto', CAPTION_TITLE, wantedLang());
   } else {
     // More of the movie is done: reload the track in place (keeps it selected).
+    j.missing = 0;
     await mpv('sub-reload', track.id);
   }
 }
 
+const CAPTION_TITLE = 'AI subtitles';
+
 export function captionTrack(): Track | undefined {
   const j = job;
   if (!j) return undefined;
-  return playback.tracks.find((t) => t.type === 'sub' && t['external-filename'] === j.srt);
+  const subs = playback.tracks.filter((t) => t.type === 'sub' && t.external);
+  return (
+    subs.find((t) => t['external-filename'] === j.srt) ??
+    subs.find((t) => (t['external-filename'] ?? '').includes(`/jobs/${j.id}`)) ??
+    subs.find((t) => t.title === CAPTION_TITLE)
+  );
 }
 
 /** Stops the job (video closed or replaced). */
