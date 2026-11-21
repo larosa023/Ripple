@@ -7,6 +7,7 @@ import { fromAniSkip, fromChapters, mergeSegments, type Chapter, type Segment } 
 import { recordPlay, resumePoint, saveProgress } from './library.svelte';
 import { parseArgs, settings } from './settings.svelte';
 import { rememberShow, shows } from './shows.svelte';
+import { startCaption, stopCaption } from '../caption';
 
 export interface NextUp {
   video: Video;
@@ -269,6 +270,7 @@ export async function openPlayer(
       if (!playback.active) await invoke('player_stop').catch(() => {});
       return;
     }
+    if (!info.live) void startCaption(p, start, info.subtitle ? `${info.title} — ${info.subtitle}` : info.title);
     if (info.meta && !info.live) {
       recordPlay(info.meta, info.videoId, info.subtitle);
       clearInterval(saveTimer);
@@ -295,6 +297,7 @@ async function picturesFolder(): Promise<string | null> {
 
 /** Saves progress and drops event listeners, leaving the window state alone. */
 function teardown(keepTorrent?: string) {
+  stopCaption();
   // Every torrent but the one about to play stops, including ones started for an external
   // player or a start that failed partway.
   if (isTauri) stopTorrents(keepTorrent);

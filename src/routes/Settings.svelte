@@ -350,6 +350,14 @@
             <SettingRow title="Subtitle languages" description="Comma-separated language codes, in order of preference (eng, spa, fre…). Ripple fetches up to 4 subtitles per language from your subtitle addons, and lists these languages first in the player.">
               <input class="input short" bind:value={settings.subtitleLangs} placeholder="eng" spellcheck="false" />
             </SettingRow>
+            <SettingRow title="AI subtitles from Caption" description="If Caption is running, it makes subtitles from the video's own audio on your GPU, ahead of playback, so they're timed to the word. They show up as “AI subtitles” in the player. Nothing leaves your PC.">
+              <Switch bind:checked={settings.captionSubs} label="AI subtitles from Caption" />
+            </SettingRow>
+            {#if settings.captionSubs}
+              <SettingRow title="Turn AI subtitles on automatically" description="When no other subtitles are selected, switch to Caption's as soon as the first lines are ready.">
+                <Switch bind:checked={settings.captionAutoOn} label="Turn AI subtitles on automatically" />
+              </SettingRow>
+            {/if}
             <SettingRow title="Auto-play top stream" description="Start playing the best stream as soon as every addon has answered.">
               <Switch bind:checked={settings.autoPlayBest} label="Auto-play top stream" />
             </SettingRow>

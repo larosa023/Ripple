@@ -42,6 +42,10 @@ export interface Settings {
   notifyEpisodes: boolean;
   autoPlayBest: boolean;
   subtitleLangs: string;
+  /** Ask Caption (local AI subtitles) for subtitles made from the video's own audio. */
+  captionSubs: boolean;
+  /** Turn Caption's subtitles on automatically when no other subtitles are selected. */
+  captionAutoOn: boolean;
   // Watching
   /** Show a "Next episode" card near the end, and count down to play it. */
   autoplayNext: boolean;
@@ -118,6 +122,8 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyEpisodes: true,
   autoPlayBest: false,
   subtitleLangs: 'eng',
+  captionSubs: true,
+  captionAutoOn: true,
   autoplayNext: true,
   nextCountdown: 10,
   skipIntro: 'button',
