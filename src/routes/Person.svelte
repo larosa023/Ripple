@@ -64,8 +64,8 @@
         <h1>{person.name}</h1>
         <div class="facts muted">
           {#if person.department}<span>{person.department === 'Acting' ? 'Actor' : person.department}</span>{/if}
-          {#if person.birthday}<span>Born {fmt(person.birthday)}{#if person.birthplace} in {person.birthplace}{/if}{#if !person.deathday} ({age(person.birthday)}){/if}</span>{/if}
-          {#if person.deathday}<span>Died {fmt(person.deathday)}{#if person.birthday} ({age(person.birthday, person.deathday)}){/if}</span>{/if}
+          {#if person.birthday}<span>{`Born ${fmt(person.birthday)}${person.birthplace ? ` in ${person.birthplace}` : ''}${person.deathday ? '' : ` (${age(person.birthday)})`}`}</span>{/if}
+          {#if person.deathday}<span>{`Died ${fmt(person.deathday)}${person.birthday ? ` (${age(person.birthday, person.deathday)})` : ''}`}</span>{/if}
         </div>
         {#if person.biography}
           <p class="bio" class:open={bioOpen}>{person.biography}</p>
@@ -102,7 +102,7 @@
 
 <style>
   .person { position: relative; }
-  .back { position: absolute; left: calc(var(--page-pad) - 44px); top: 30px; }
+  .back { margin: 0 0 8px -8px; }
   .top { display: flex; gap: 32px; align-items: flex-start; margin: 6px 0 34px; }
   .photo { width: 220px; aspect-ratio: 2 / 3; flex-shrink: 0; border-radius: var(--radius); overflow: hidden; background: var(--bg-3); display: grid; place-items: center; box-shadow: 0 14px 40px rgb(0 0 0 / 0.35); }
   .photo img { width: 100%; height: 100%; object-fit: cover; }

@@ -207,6 +207,11 @@ pub async fn torrent_stream(
         })
         .map_err(|e| format!("Couldn't read the torrent's file list: {e:#}"))?;
     let idx = choose_file(&files, file_idx, file_hint.as_deref()).ok_or("This torrent has no files.")?;
+    // File selection can only change once the torrent has finished setting up.
+    tokio::time::timeout(Duration::from_secs(30), handle.wait_until_initialized())
+        .await
+        .map_err(|_| "The torrent took too long to start.".to_string())?
+        .map_err(|e| format!("Couldn't start this torrent: {e:#}"))?;
     session
         .update_only_files(&handle, &[idx].into_iter().collect())
         .await
