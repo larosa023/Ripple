@@ -224,6 +224,7 @@ export async function openPlayer(
   // Switching videos (next episode): keep the player window, fullscreen and mini mode as they are.
   const keep = playback.active ? { fullscreen: playback.fullscreen, mini: playback.mini } : null;
   if (playback.active) teardown(p.torrent);
+  else if (isTauri) stopTorrents(p.torrent);
   const token = ++startToken;
   firstTime = null;
   tracksApplied = false;
@@ -290,7 +291,9 @@ async function picturesFolder(): Promise<string | null> {
 
 /** Saves progress and drops event listeners, leaving the window state alone. */
 function teardown(keepTorrent?: string) {
-  if (playback.source?.torrent && playback.source.torrent !== keepTorrent) stopTorrents(keepTorrent);
+  // Every torrent but the one about to play stops, including ones started for an external
+  // player or a start that failed partway.
+  if (isTauri) stopTorrents(keepTorrent);
   persistProgress();
   clearInterval(saveTimer);
   unlisteners.forEach((u) => u());

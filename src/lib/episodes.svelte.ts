@@ -63,7 +63,7 @@ export async function checkNewEpisodes(): Promise<NewEpisode[]> {
     const worker = async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
         try {
-          const meta = await getMeta(enabledAddons(), s.type, s.id);
+          const meta = await getMeta(enabledAddons(), s.type, s.id, true);
           for (const v of meta.videos ?? []) {
             if (!v.released || (v.season ?? 0) === 0 || isWatched(v.id)) continue;
             const t = +airDate(v.released);

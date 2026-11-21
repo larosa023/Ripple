@@ -188,13 +188,14 @@ export function uniqueBy<T>(list: T[], key: (x: T) => string): T[] {
 }
 
 /** First enabled addon that can resolve the meta wins (addon order = priority). */
-export async function getMeta(addons: InstalledAddon[], type: string, id: string): Promise<MetaDetail> {
+/** `fresh`: skip the saved copy (for checks that must see the latest episode list). */
+export async function getMeta(addons: InstalledAddon[], type: string, id: string, fresh = false): Promise<MetaDetail> {
   const candidates = addons.filter((a) => a.enabled && supports(a, 'meta', type, id));
   let lastErr: unknown = new Error('No installed addon can show details for this item.');
   for (const a of candidates) {
     const url = resourceUrl(a, 'meta', type, id);
     try {
-      const meta = await persisted(url, 30 * 60_000, 6 * 3600_000, () =>
+      const meta = await persisted(url, fresh ? 0 : 30 * 60_000, fresh ? 0 : 6 * 3600_000, () =>
         getJson<{ meta?: MetaDetail }>(url, requestTimeout).then((r) => {
           if (!r.meta) throw new Error('Empty meta');
           const m = r.meta;

@@ -183,6 +183,13 @@ pub async fn torrent_stream(
         paused: true,
         ..Default::default()
     };
+    // Registered before the (possibly slow) lookup, so a Stop that arrives meanwhile catches it.
+    {
+        let mut active = ACTIVE.lock().await;
+        if !active.contains(&hash) {
+            active.push(hash.clone());
+        }
+    }
     let added = tokio::time::timeout(
         Duration::from_secs(60),
         session.add_torrent(AddTorrent::from_url(magnet(&hash, &trackers)), Some(opts)),
@@ -191,11 +198,12 @@ pub async fn torrent_stream(
     .map_err(|_| "Couldn't find anyone sharing this torrent. Try another source.".to_string())?
     .map_err(|e| format!("Couldn't open this torrent: {e:#}"))?;
     let handle = added.into_handle().ok_or("Couldn't open this torrent.")?;
-    {
-        let mut active = ACTIVE.lock().await;
-        if !active.contains(&hash) {
-            active.push(hash.clone());
+    if !ACTIVE.lock().await.contains(&hash) {
+        // Stopped while we were finding it: don't start downloading after all.
+        if let Ok(id) = TorrentIdOrHash::parse(&hash) {
+            let _ = session.delete(id, true).await;
         }
+        return Err("CANCELLED: stopped while starting".into());
     }
 
     let files: Vec<(String, u64)> = handle
@@ -256,12 +264,15 @@ pub async fn torrent_status(info_hash: String) -> Result<TorrentStatus, String> 
 
 /// Stops every torrent (except `keep`, the one about to play) and deletes what was downloaded.
 #[tauri::command]
-pub async fn torrent_stop_all(keep: Option<String>) {
+pub async fn torrent_stop_all(keep: Option<String>, only: Option<String>) {
     let Some(eng) = ENGINE.get() else { return };
     let keep = keep.map(|k| k.to_ascii_lowercase());
+    let only = only.map(|k| k.to_ascii_lowercase());
     let hashes: Vec<String> = {
         let mut active = ACTIVE.lock().await;
-        let (kept, gone): (Vec<String>, Vec<String>) = active.drain(..).partition(|h| Some(h) == keep.as_ref());
+        let (gone, kept): (Vec<String>, Vec<String>) = active
+            .drain(..)
+            .partition(|h| Some(h) != keep.as_ref() && only.as_ref().map_or(true, |o| o == h));
         *active = kept;
         gone
     };
@@ -324,12 +335,10 @@ fn parse_range(v: &str, len: u64) -> Option<Result<(u64, u64), ()>> {
     Some(if range.0 >= len || range.1 <= range.0 { Err(()) } else { Ok(range) })
 }
 
-async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> {
-    let (rd, mut wr) = sock.into_split();
-    let mut rd = BufReader::new(rd);
+async fn read_head(rd: &mut BufReader<tokio::net::tcp::OwnedReadHalf>) -> std::io::Result<(String, Option<String>, Option<String>)> {
     let mut request = String::new();
     rd.read_line(&mut request).await?;
-    let mut range_header = None;
+    let (mut range, mut host) = (None, None);
     let mut total = request.len();
     loop {
         let mut line = String::new();
@@ -340,9 +349,27 @@ async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> 
         }
         if let Some((k, v)) = line.split_once(':') {
             if k.trim().eq_ignore_ascii_case("range") {
-                range_header = Some(v.trim().to_string());
+                range = Some(v.trim().to_string());
+            } else if k.trim().eq_ignore_ascii_case("host") {
+                host = Some(v.trim().to_string());
             }
         }
+    }
+    Ok((request, range, host))
+}
+
+async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> {
+    let (rd, mut wr) = sock.into_split();
+    let mut rd = BufReader::new(rd);
+    let Ok(head) = tokio::time::timeout(Duration::from_secs(10), read_head(&mut rd)).await else { return Ok(()) };
+    let (request, range_header, host) = head?;
+    // Only for mpv on this PC: a web page can't reach it by pointing some other name at 127.0.0.1.
+    let host_ok = host.as_deref().map_or(true, |h| {
+        let name = h.rsplit_once(':').map_or(h, |(n, _)| n);
+        name == "127.0.0.1" || name.eq_ignore_ascii_case("localhost")
+    });
+    if !host_ok {
+        return respond(&mut wr, "403 Forbidden", &[]).await;
     }
     let mut parts = request.split_whitespace();
     let method = parts.next().unwrap_or("");
@@ -356,7 +383,11 @@ async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> 
         return respond(&mut wr, "404 Not Found", &[]).await;
     };
     let Some(eng) = ENGINE.get() else { return respond(&mut wr, "503 Service Unavailable", &[]).await };
-    let Ok(id) = TorrentIdOrHash::parse(hash) else { return respond(&mut wr, "404 Not Found", &[]).await };
+    let hash = hash.to_ascii_lowercase();
+    if !valid_hash(&hash) || !ACTIVE.lock().await.contains(&hash) {
+        return respond(&mut wr, "404 Not Found", &[]).await;
+    }
+    let Ok(id) = TorrentIdOrHash::parse(&hash) else { return respond(&mut wr, "404 Not Found", &[]).await };
     let mut stream = match eng.api.api_stream(id, idx).await {
         Ok(s) => s,
         Err(_) => return respond(&mut wr, "404 Not Found", &[]).await,
@@ -385,7 +416,13 @@ async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> 
     }
     stream.seek(SeekFrom::Start(start)).await?;
     let mut body = stream.take(end - start);
-    tokio::io::copy(&mut body, &mut wr).await?;
+    // When the player hangs up (a seek, a new episode, closing), stop at once: a stream waiting
+    // on a missing piece holds one of the engine's few slots, and enough stuck ones stall it.
+    let mut probe = [0u8; 1];
+    tokio::select! {
+        r = tokio::io::copy(&mut body, &mut wr) => { r?; }
+        _ = async { loop { match rd.read(&mut probe).await { Ok(0) | Err(_) => break, Ok(_) => {} } } } => { return Ok(()); }
+    }
     wr.shutdown().await
 }
 
@@ -463,7 +500,7 @@ mod tests {
             assert!(buf.len() > 65536, "got {}", buf.len());
             let st = torrent_status(s.info_hash.clone()).await.unwrap();
             println!("peers {} speed {}", st.peers, st.download_speed);
-            torrent_stop_all(None).await;
+            torrent_stop_all(None, None).await;
         });
         shutdown();
     }

@@ -24,7 +24,7 @@
       </div>
     </header>
     <div class="scroller" use:dragScroll bind:this={scroller}>
-      {#each items as meta, i (meta.id)}
+      {#each items as meta, i (meta.type + meta.id)}
         <PosterCard {meta} subtitle={subtitles?.[i] ?? ''} />
       {/each}
     </div>

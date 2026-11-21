@@ -179,16 +179,22 @@
   $effect(() => {
     if (!stats || !playback.active) return;
     let alive = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // Next round only after this one finishes, so a slow player never builds up a queue of reads.
     const tick = async () => {
       const out: Stats = {};
-      for (const p of STAT_PROPS) out[p] = await mpv('get_property', p);
-      if (alive) info = out;
+      for (const p of STAT_PROPS) {
+        if (!alive) return;
+        out[p] = await mpv('get_property', p);
+      }
+      if (!alive) return;
+      info = out;
+      t = setTimeout(tick, 1500);
     };
     void tick();
-    const t = setInterval(tick, 1500);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   });
   const statRows = $derived.by(() => {
@@ -670,7 +676,7 @@
         <div class="track">
           <div class="buf" style:width="{buffered}%"></div>
           <div class="fill" style:width="{progress}%"></div>
-          {#each chapterMarks as c (c.time)}<i class="chap" style:left="{(c.time / playback.duration) * 100}%"></i>{/each}
+          {#each chapterMarks as c, i (i)}<i class="chap" style:left="{(c.time / playback.duration) * 100}%"></i>{/each}
         </div>
         <div class="knob" style:left="{progress}%"></div>
         {#if hoverX !== null && playback.duration}

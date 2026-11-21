@@ -253,7 +253,7 @@ fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64)
     if let Some(dir) = screenshot_dir(req) {
         args.push(format!("--screenshot-directory={}", dir.display()));
     }
-    args.push("--screenshot-template=Ripple %tY-%tm-%td %tH.%tM.%tS".into());
+    args.push("--screenshot-template=Ripple %tY-%tm-%td %tH.%tM.%tS %n".into());
     args.push("--screenshot-format=png".into());
     args.push("--".into());
     args.push(req.url.clone());
@@ -411,6 +411,14 @@ pub async fn player_command(args: Vec<Value>) -> Result<Value, String> {
     if !ALLOWED.contains(&name) {
         return Err(format!("Command '{name}' isn't allowed."));
     }
+    let arg1 = args.get(1).and_then(Value::as_str).unwrap_or_default();
+    // Where screenshots go is fixed at startup, and only single-frame screenshots are allowed.
+    if (name == "set_property" || name == "cycle" || name == "add") && (arg1.starts_with("screenshot") || arg1.starts_with("options/screenshot")) {
+        return Err("That property can't be changed.".into());
+    }
+    if name == "screenshot" && args.len() > 1 && !matches!(arg1, "video" | "subtitles" | "window") {
+        return Err("Unsupported screenshot mode.".into());
+    }
     tauri::async_runtime::spawn_blocking(move || send(Value::Array(args))).await.map_err(|e| e.to_string())?
 }
 
@@ -533,7 +541,8 @@ mod tests {
         assert!(vp["w"].as_u64().unwrap() > 0, "{vp}");
         let shots = std::env::temp_dir().join("ripple-shots");
         let _ = std::fs::remove_dir_all(&shots);
-        send(json!(["set_property", "screenshot-directory", shots.to_string_lossy()])).unwrap();
+        assert!(tauri::async_runtime::block_on(player_command(vec![json!("set_property"), json!("screenshot-directory"), json!("C:/x")])).is_err());
+        send(json!(["set_property", "screenshot-directory", shots.to_string_lossy()])).unwrap(); // direct IPC (the UI path is blocked above)
         let r = send(json!(["screenshot", "video"])).unwrap();
         println!("screenshot reply: {r}");
         let n = std::fs::read_dir(&shots).map(|d| d.count()).unwrap_or(0);

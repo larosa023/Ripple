@@ -5,6 +5,7 @@
   import { CINEMETA_URL } from '../lib/stores/addons.svelte';
   import { settings } from '../lib/stores/settings.svelte';
   import { router } from '../lib/stores/router.svelte';
+  import { untrack } from 'svelte';
   import type { InstalledAddon } from '../lib/stremio/types';
   import { openExternal } from '../lib/player';
   import {
@@ -74,7 +75,7 @@
     dirState = ok ? 'done' : 'error';
   }
   $effect(() => {
-    if (tab === 'explore') void loadDirectory();
+    if (tab === 'explore') untrack(() => void loadDirectory());
   });
 
   const installedUrls = $derived(new Set(addons.list.map((a) => a.transportUrl.replace(/^https?:/, ''))));
