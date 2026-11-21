@@ -10,6 +10,9 @@
   import { isWatched, library } from '../lib/stores/library.svelte';
   import { href } from '../lib/stores/router.svelte';
   import { epCode } from '../lib/watch';
+  import { markEpisodesSeen } from '../lib/episodes.svelte';
+
+  markEpisodesSeen();
 
   interface Entry {
     show: MetaDetail;

@@ -17,18 +17,35 @@
   import { settings } from './lib/stores/settings.svelte';
   import { applyLook, look } from './lib/theme/look.svelte';
   import { startDiscordSync } from './lib/discord.svelte';
-  import Calendar from './routes/Calendar.svelte';
-  import Live from './routes/Live.svelte';
-  import Addons from './routes/Addons.svelte';
+  import { startEpisodeChecks } from './lib/episodes.svelte';
+  import type { Component } from 'svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
   import Home from './routes/Home.svelte';
   import Library from './routes/Library.svelte';
   import Search from './routes/Search.svelte';
-  import Settings from './routes/Settings.svelte';
 
-  const pages = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library, live: Live, calendar: Calendar, addons: Addons, settings: Settings };
-  const Page = $derived(pages[router.route.name]);
+  // Browsing pages load with the app; the rest load on first visit (and quietly in the
+  // background a few seconds after launch), so startup has less to parse.
+  const pages: Record<string, Component> = { home: Home, discover: Discover, search: Search, detail: Detail, library: Library };
+  const later: Record<string, () => Promise<{ default: Component }>> = {
+    live: () => import('./routes/Live.svelte'),
+    calendar: () => import('./routes/Calendar.svelte'),
+    addons: () => import('./routes/Addons.svelte'),
+    settings: () => import('./routes/Settings.svelte'),
+    person: () => import('./routes/Person.svelte'),
+  };
+  let loadedPages = $state<Record<string, Component>>({});
+  function loadPage(name: string) {
+    if (pages[name] || loadedPages[name] || !later[name]) return;
+    void later[name]().then((m) => (loadedPages = { ...loadedPages, [name]: m.default }));
+  }
+  $effect(() => loadPage(router.route.name));
+  onMount(() => {
+    const t = setTimeout(() => Object.keys(later).forEach(loadPage), 4000);
+    return () => clearTimeout(t);
+  });
+  const Page = $derived(pages[router.route.name] ?? loadedPages[router.route.name]);
 
   // Apply the whole look (colors, fonts, layout attributes, custom CSS) whenever any part changes.
   $effect(() => {
@@ -52,6 +69,7 @@
   });
 
   startDiscordSync();
+  onMount(startEpisodeChecks);
 
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);
@@ -91,7 +109,7 @@
     <UpdateBanner />
     <div class="view">
       {#key router.route.name === 'detail' ? router.route.params.join('/') : router.route.name}
-        <Page />
+        {#if Page}<Page />{/if}
       {/key}
     </div>
   </main>

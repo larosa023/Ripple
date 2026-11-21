@@ -9,6 +9,21 @@
   import { go, router } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
   import { untrack } from 'svelte';
+  import { hasTmdb, searchPeople, type PersonHit } from '../lib/tmdb';
+  import { href } from '../lib/stores/router.svelte';
+  import { load, save } from '../lib/stores/persist';
+
+  // Recent searches, newest first.
+  let recent = $state<string[]>(load<string[]>('recentSearches', []));
+  function remember(q: string) {
+    recent = [q, ...recent.filter((r) => r.toLowerCase() !== q.toLowerCase())].slice(0, 12);
+    save('recentSearches', recent);
+  }
+  function forget(q: string) {
+    recent = recent.filter((r) => r !== q);
+    save('recentSearches', recent);
+  }
+  let people = $state<PersonHit[]>([]);
 
   interface Group {
     key: string;
@@ -48,9 +63,17 @@
     const q = query.trim();
     const my = ++token;
     groups = [];
+    people = [];
     if (!q) {
       pending = 0;
       return;
+    }
+    // Saved once you've paused on a search, not on every keystroke.
+    const keep = setTimeout(() => remember(q), 1500);
+    if (hasTmdb() && q.length > 1) {
+      searchPeople(q)
+        .then((p) => my === token && (people = p))
+        .catch(() => {});
     }
     const targets = untrack(() => searchable);
     pending = targets.length;
@@ -70,6 +93,7 @@
           if (my === token) pending--;
         });
     }
+    return () => clearTimeout(keep);
   });
 
   function onInput() {
@@ -103,8 +127,35 @@
   </div>
 
   {#if !query}
-    <div class="empty faint">Search runs across every addon catalog that supports it.</div>
+    {#if recent.length}
+      <section>
+        <h2>Recent searches</h2>
+        <div class="chips">
+          {#each recent as r (r)}
+            <span class="chip">
+              <button class="ctext" onclick={() => { input = r; go('search', [], { q: r }, true); }}>{r}</button>
+              <button class="cx" onclick={() => forget(r)} aria-label="Remove {r}"><Icon name="x" size={12} /></button>
+            </span>
+          {/each}
+        </div>
+      </section>
+    {/if}
+    <div class="empty faint">Search runs across every addon catalog that supports it{hasTmdb() ? ', plus people from TMDB' : ''}.</div>
   {:else}
+    {#if people.length}
+      <section>
+        <h2>People <span class="faint">TMDB</span></h2>
+        <div class="scroller" use:dragScroll>
+          {#each people as p (p.id)}
+            <a class="who" href={href('person', String(p.id))}>
+              <img src={p.photo} alt="" loading="lazy" />
+              <b>{p.name}</b>
+              <small>{p.knownFor}</small>
+            </a>
+          {/each}
+        </div>
+      </section>
+    {/if}
     {#each groups as g (g.key)}
       <section>
         <h2>{g.title} <span class="faint">{g.source}</span></h2>
@@ -131,4 +182,15 @@
   h2 span { font-size: 12px; font-weight: 500; margin-left: 6px; }
   .scroller { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
   .scroller::-webkit-scrollbar { display: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; }
+  .chip:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  .ctext { border: 0; background: none; color: var(--text); font: 500 13.5px var(--font); padding: 7px 4px 7px 14px; cursor: pointer; }
+  .cx { border: 0; background: none; color: var(--text-3); padding: 7px 10px 7px 6px; cursor: pointer; display: grid; }
+  .cx:hover { color: var(--text); }
+  .who { width: 112px; flex-shrink: 0; text-align: center; color: inherit; text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .who img { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; background: var(--bg-3); margin-bottom: 6px; transition: box-shadow var(--dur); }
+  .who:hover img { box-shadow: 0 0 0 2px var(--accent); }
+  .who b { font-size: 13.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who small { font-size: 11.5px; color: var(--text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

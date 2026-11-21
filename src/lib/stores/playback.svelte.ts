@@ -1,5 +1,5 @@
 // State and controls for the built-in player (mpv embedded in Ripple's window).
-import { invoke, type Prepared } from '../player';
+import { invoke, stopTorrents, type Prepared } from '../player';
 import { isTauri } from '../stremio/http';
 import type { MetaDetail, SourcedStream, Video } from '../stremio/types';
 import { fromAniSkip, fromChapters, mergeSegments, type Chapter, type Segment } from '../skip';
@@ -51,6 +51,7 @@ interface PlaybackState {
   /** Shrunk into a corner while you browse. */
   mini: boolean;
   subDelay: number;
+  audioDelay: number;
   // mpv properties
   time: number;
   duration: number;
@@ -86,6 +87,7 @@ const blank = (): PlaybackState => ({
   next: null,
   mini: false,
   subDelay: 0,
+  audioDelay: 0,
   time: 0,
   duration: 0,
   paused: false,
@@ -221,7 +223,7 @@ export async function openPlayer(
 ) {
   // Switching videos (next episode): keep the player window, fullscreen and mini mode as they are.
   const keep = playback.active ? { fullscreen: playback.fullscreen, mini: playback.mini } : null;
-  if (playback.active) teardown();
+  if (playback.active) teardown(p.torrent);
   const token = ++startToken;
   firstTime = null;
   tracksApplied = false;
@@ -254,6 +256,7 @@ export async function openPlayer(
         subLangs: settings.subtitleLangs,
         volume: settings.volume,
         live: !!info.live,
+        screenshotDir: await picturesFolder(),
       },
     });
     if (token !== startToken || !playback.active) {
@@ -273,17 +276,30 @@ export async function openPlayer(
   }
 }
 
+let pictures: string | null | undefined;
+async function picturesFolder(): Promise<string | null> {
+  if (pictures !== undefined) return pictures;
+  try {
+    const path = await import('@tauri-apps/api/path');
+    pictures = await path.join(await path.pictureDir(), 'Ripple');
+  } catch {
+    pictures = null;
+  }
+  return pictures;
+}
+
 /** Saves progress and drops event listeners, leaving the window state alone. */
-function teardown() {
+function teardown(keepTorrent?: string) {
+  if (playback.source?.torrent && playback.source.torrent !== keepTorrent) stopTorrents(keepTorrent);
   persistProgress();
   clearInterval(saveTimer);
   unlisteners.forEach((u) => u());
   unlisteners = [];
 }
 
-export async function closePlayer(stopMpv = true) {
+export async function closePlayer(stopMpv = true, keepTorrent?: string) {
   startToken++;
-  teardown();
+  teardown(keepTorrent);
   if (stopMpv && isTauri) await invoke('player_stop').catch(() => {});
   // Leave fullscreen only if the player turned it on; fullscreen chosen on a page stays.
   if (playback.fullscreen && playerFullscreen) await setFullscreen(false);
@@ -341,6 +357,37 @@ export function applySubStyle() {
 export function setSubDelay(seconds: number) {
   playback.subDelay = Math.round(seconds * 10) / 10;
   setProp('sub-delay', playback.subDelay);
+}
+
+/** Shifts audio when it's out of sync with the picture (positive = later). */
+export function setAudioDelay(seconds: number) {
+  playback.audioDelay = Math.round(Math.max(-10, Math.min(10, seconds)) * 10) / 10;
+  setProp('audio-delay', playback.audioDelay);
+}
+
+export type Aspect = 'fit' | 'fill' | 'stretch';
+export const ASPECT_LABEL: Record<Aspect, string> = { fit: 'Fit', fill: 'Fill (crop)', stretch: 'Stretch' };
+
+/** Fit shows the whole picture; Fill crops to cover the screen (no black bars); Stretch distorts. */
+export function applyAspect() {
+  if (!playback.active) return;
+  const a = settings.videoAspect;
+  setProp('keepaspect', a !== 'stretch');
+  setProp('panscan', a === 'fill' ? 1 : 0);
+}
+
+export function cycleAspect(): Aspect {
+  const order: Aspect[] = ['fit', 'fill', 'stretch'];
+  settings.videoAspect = order[(order.indexOf(settings.videoAspect) + 1) % order.length];
+  applyAspect();
+  return settings.videoAspect;
+}
+
+/** Saves the current frame to Pictures\Ripple. Resolves with the file name when mpv reports it. */
+export async function screenshot(withSubs = false): Promise<string | null> {
+  const r = (await mpv('screenshot', withSubs ? 'subtitles' : 'video')) as { filename?: string } | null | undefined;
+  if (r === undefined) throw new Error("Couldn't take a screenshot.");
+  return r?.filename ?? null;
 }
 
 // ---------- per-show tracks ----------

@@ -1,0 +1,30 @@
+name: Torrent engine test
+
+# Streams a well-seeded public-domain torrent (Big Buck Bunny) through Ripple's built-in engine
+# on a real Windows machine. Run by hand, or by pushing to a ci/* branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ci/**']
+
+jobs:
+  torrent:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Stream a real torrent
+        working-directory: src-tauri
+        env:
+          RIPPLE_TEST_TORRENT: '1'
+        run: cargo test --lib torrent -- --nocapture --test-threads=1

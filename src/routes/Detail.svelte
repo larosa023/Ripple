@@ -10,12 +10,14 @@
   import { openMenu } from '../lib/stores/ui.svelte';
   import { airDate } from '../lib/dates';
   import { fmtTime, playback, setFullscreen } from '../lib/stores/playback.svelte';
-  import { back, router } from '../lib/stores/router.svelte';
+  import { back, go, href, router } from '../lib/stores/router.svelte';
   import { isTauri } from '../lib/stremio/http';
   import { untrack } from 'svelte';
   import { backdropOf, logoOf } from '../lib/stremio/images';
   import { look } from '../lib/theme/look.svelte';
   import { getCast, type Person } from '../lib/stremio/cast';
+  import PosterRow from '../lib/components/PosterRow.svelte';
+  import { hasTmdb, imdbOf, titleExtras, type TitleExtras } from '../lib/tmdb';
   import { settings } from '../lib/stores/settings.svelte';
   import { filmUrl } from '../lib/letterboxd';
   import { ratingColor, seriesGraphUrl, showRatings, type ShowRatings } from '../lib/ratings';
@@ -39,6 +41,23 @@
     season = null;
     logoFailed = false;
     let live = true;
+    // Titles from TMDB (recommendations, people pages) arrive as "tmdb:<id>": swap in the
+    // IMDb id so Cinemeta, stream addons and your library all recognise the title.
+    if (i.startsWith('tmdb:')) {
+      const tid = Number(i.slice(5));
+      imdbOf(t === 'series' ? 'tv' : 'movie', tid)
+        .then((imdb) => {
+          if (!live) return;
+          if (imdb) go('detail', [t, imdb], undefined, true);
+          else loadMeta();
+        })
+        .catch(() => live && loadMeta());
+      return () => {
+        live = false;
+      };
+    }
+    loadMeta();
+    function loadMeta() {
     getMeta(untrack(enabledAddons), t, i)
       .then((m) => {
         if (!live) return;
@@ -54,6 +73,22 @@
       .catch((e) => {
         if (live) error = (e as Error).message;
       });
+    }
+    return () => {
+      live = false;
+    };
+  });
+
+  // "More like this" and the movie's collection (TMDB key needed).
+  let extras = $state<TitleExtras>({ recommended: [], collection: null });
+  $effect(() => {
+    const m = meta;
+    extras = { recommended: [], collection: null };
+    if (!m || !hasTmdb()) return;
+    let live = true;
+    titleExtras(m)
+      .then((x) => live && (extras = x))
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -408,20 +443,27 @@
           {/if}
           <div class="cast" use:dragScroll>
             {#each cast as c, i (i)}
-              <div class="person">
+              <svelte:element this={c.tmdbId ? 'a' : 'div'} class="person" class:clickable={!!c.tmdbId} href={c.tmdbId ? href('person', String(c.tmdbId)) : undefined}>
                 <div class="face">
                   <span>{initials(c.name)}</span>
                   {#if c.photo}<img src={c.photo} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')} />{/if}
                 </div>
                 <div class="pname" title={c.name}>{c.name}</div>
                 {#if c.character}<div class="role" title={c.character}>{c.character}</div>{/if}
-              </div>
+              </svelte:element>
             {/each}
           </div>
           {#if cast.some((c) => c.photo.includes('image.tmdb.org'))}
             <p class="credit">Cast data from <button class="link" onclick={() => openExternal('https://www.themoviedb.org')}>TMDB</button></p>
           {/if}
         </section>
+      {/if}
+
+      {#if extras.collection}
+        <div class="block"><PosterRow title={extras.collection.name} items={extras.collection.items} /></div>
+      {/if}
+      {#if extras.recommended.length}
+        <div class="block"><PosterRow title="More like this" items={extras.recommended} /></div>
       {/if}
 
       {#if trailers.length}
@@ -524,7 +566,10 @@
   /* Cast */
   .cast { display: flex; gap: 18px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
   .cast::-webkit-scrollbar { display: none; }
-  .person { width: 92px; flex-shrink: 0; text-align: center; }
+  .person { width: 92px; flex-shrink: 0; text-align: center; color: inherit; text-decoration: none; }
+  .person.clickable { cursor: pointer; }
+  .person.clickable:hover .pname { color: var(--accent); }
+  .person.clickable:hover .face { box-shadow: 0 0 0 2px var(--accent); }
   .face {
     position: relative; width: 84px; height: 84px; margin: 0 auto 8px; border-radius: 50%; overflow: hidden;
     background: color-mix(in srgb, var(--accent) 22%, var(--bg-3)); display: grid; place-items: center;

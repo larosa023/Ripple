@@ -61,6 +61,36 @@ export interface Prepared {
   url: string;
   subtitles: string[];
   headers: [string, string][];
+  /** Info hash when the built-in torrent engine is streaming this. */
+  torrent?: string;
+}
+
+interface TorrentStream {
+  url: string;
+  fileName: string;
+  size: number;
+  infoHash: string;
+}
+
+export interface TorrentStatus {
+  peers: number;
+  downloadSpeed: number;
+  downloaded: number;
+  total: number;
+}
+
+export function torrentStatus(infoHash: string): Promise<TorrentStatus> {
+  return invoke<TorrentStatus>('torrent_status', { infoHash });
+}
+
+/** Stops built-in torrents and frees their disk space. */
+export function stopTorrents(keep?: string): void {
+  if (isTauri) void invoke('torrent_stop_all', { keep: keep ?? null }).catch(() => {});
+}
+
+/** Whether a P2P stream will use Ripple's own engine (rather than a Stremio streaming server). */
+export function usesBuiltinTorrent(s: SourcedStream): boolean {
+  return !!s.infoHash && !s.url && isTauri && settings.torrentEngine === 'builtin';
 }
 
 /**
@@ -75,6 +105,22 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
   }
   let url = playableUrl(stream, settings.streamingServer);
   if (!url) throw new Error('This stream has no playable link.');
+  let torrent: string | undefined;
+  if (usesBuiltinTorrent(stream)) {
+    const t = toast('Finding people sharing this torrent…', 'info', 60000);
+    try {
+      const r = await invoke<TorrentStream>('torrent_stream', {
+        infoHash: stream.infoHash,
+        fileIdx: stream.fileIdx ?? null,
+        trackers: stream.sources ?? [],
+        fileHint: stream.behaviorHints?.filename ?? null,
+      });
+      url = r.url;
+      torrent = r.infoHash;
+    } finally {
+      dismiss(t);
+    }
+  }
   const headers = Object.entries(stream.behaviorHints?.proxyHeaders?.request ?? {}) as [string, string][];
 
   // Debrid links: resolve the addon's redirect ourselves so the player gets the file directly,
@@ -108,7 +154,7 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
       /* subtitles are best-effort */
     }
   }
-  return { url, subtitles, headers };
+  return { url, subtitles, headers, torrent };
 }
 
 /** Plays a prepared stream in the configured external player. */

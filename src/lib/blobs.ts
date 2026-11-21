@@ -52,3 +52,24 @@ export async function delBlob(key: string): Promise<void> {
   memory.delete(key);
   await run('readwrite', (s) => s.delete(key));
 }
+
+/** Deletes entries whose key starts with `prefix` and whose `at` timestamp is older than `maxAgeMs`. */
+export async function pruneBlobs(prefix: string, maxAgeMs: number): Promise<void> {
+  const d = await db();
+  if (!d) return;
+  const cutoff = Date.now() - maxAgeMs;
+  try {
+    const store = d.transaction(STORE, 'readwrite').objectStore(STORE);
+    const range = IDBKeyRange.bound(prefix, prefix + '￿');
+    const req = store.openCursor(range);
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return;
+      const v = c.value as { at?: number } | undefined;
+      if (!v || typeof v.at !== 'number' || v.at < cutoff) c.delete();
+      c.continue();
+    };
+  } catch {
+    /* best effort */
+  }
+}

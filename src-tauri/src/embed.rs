@@ -102,6 +102,8 @@ pub struct EmbedRequest {
     /// A live TV channel: reconnect when the stream drops instead of stopping.
     #[serde(default)]
     pub live: bool,
+    #[serde(default)]
+    pub screenshot_dir: Option<String>,
 }
 
 /// mpv options for request headers. User-Agent and Referer have their own options; ffmpeg would
@@ -125,6 +127,16 @@ fn header_args(headers: &[(String, String)]) -> Vec<String> {
         out.push(format!("--http-header-fields={}", rest.join(",")));
     }
     out
+}
+
+/// Where screenshots go: the folder the app passes (Pictures\\Ripple, wherever Windows keeps
+/// Pictures), else a Ripple folder under the home Pictures folder. mpv creates it on first use.
+fn screenshot_dir(req: &EmbedRequest) -> Option<std::path::PathBuf> {
+    if let Some(d) = req.screenshot_dir.as_deref().filter(|d| !d.is_empty()) {
+        return Some(std::path::PathBuf::from(d));
+    }
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+    Some(std::path::PathBuf::from(home).join("Pictures").join("Ripple"))
 }
 
 /// Prefix the UI looks for to offer installing mpv.
@@ -238,6 +250,11 @@ fn spawn_mpv(req: &EmbedRequest, platform_args: &[String]) -> Result<(Conn, u64)
         args.push("--stream-lavf-o-append=reconnect_delay_max=5".into());
     }
     args.extend(req.extra_args.iter().cloned());
+    if let Some(dir) = screenshot_dir(req) {
+        args.push(format!("--screenshot-directory={}", dir.display()));
+    }
+    args.push("--screenshot-template=Ripple %tY-%tm-%td %tH.%tM.%tS".into());
+    args.push("--screenshot-format=png".into());
     args.push("--".into());
     args.push(req.url.clone());
 
@@ -386,7 +403,10 @@ fn read_reply(conn: Conn, id: u32) -> Result<Value, String> {
 #[tauri::command]
 pub async fn player_command(args: Vec<Value>) -> Result<Value, String> {
     // Only the commands the UI needs; nothing that runs programs or writes files.
-    const ALLOWED: &[&str] = &["set_property", "get_property", "cycle", "seek", "add", "sub-add", "audio-add", "frame-step", "frame-back-step"];
+    const ALLOWED: &[&str] = &[
+        "set_property", "get_property", "cycle", "seek", "add", "sub-add", "audio-add", "frame-step", "frame-back-step",
+        "screenshot", // saves into the screenshot folder set at startup
+    ];
     let name = args.first().and_then(Value::as_str).unwrap_or_default();
     if !ALLOWED.contains(&name) {
         return Err(format!("Command '{name}' isn't allowed."));
@@ -459,6 +479,7 @@ mod tests {
             sub_langs: Some("eng".into()),
             volume: Some(80.0),
             live: true,
+            screenshot_dir: None,
         };
         let headless = ["--vo=null".to_string(), "--ao=null".to_string()];
         let (conn, session) = spawn_mpv(&req, &headless).expect("mpv should accept every option");
@@ -501,6 +522,22 @@ mod tests {
         assert_eq!(send(json!(["get_property", "user-agent"])).unwrap(), json!("Ripple/1, test"));
         assert_eq!(send(json!(["get_property", "referrer"])).unwrap(), json!("https://example.com/"));
         assert_eq!(send(json!(["get_property", "http-header-fields"])).unwrap(), json!(["X-Token: a,b"]));
+        // Picture sizing, audio sync, stats and screenshots, as the player UI uses them.
+        send(json!(["set_property", "keepaspect", false])).unwrap();
+        assert_eq!(send(json!(["get_property", "keepaspect"])).unwrap(), json!(false));
+        send(json!(["set_property", "panscan", 1])).unwrap();
+        assert_eq!(send(json!(["get_property", "panscan"])).unwrap(), json!(1.0));
+        send(json!(["set_property", "audio-delay", 0.3])).unwrap();
+        assert!((send(json!(["get_property", "audio-delay"])).unwrap().as_f64().unwrap() - 0.3).abs() < 1e-6);
+        let vp = send(json!(["get_property", "video-params"])).unwrap();
+        assert!(vp["w"].as_u64().unwrap() > 0, "{vp}");
+        let shots = std::env::temp_dir().join("ripple-shots");
+        let _ = std::fs::remove_dir_all(&shots);
+        send(json!(["set_property", "screenshot-directory", shots.to_string_lossy()])).unwrap();
+        let r = send(json!(["screenshot", "video"])).unwrap();
+        println!("screenshot reply: {r}");
+        let n = std::fs::read_dir(&shots).map(|d| d.count()).unwrap_or(0);
+        assert_eq!(n, 1, "one screenshot written");
 
         // Stopping ends the session and the listener.
         shutdown();
@@ -528,6 +565,7 @@ mod tests {
             sub_langs: None,
             volume: Some(0.0),
             live: false,
+            screenshot_dir: None,
         };
         let headless = ["--vo=null".to_string(), "--ao=null".to_string()];
         let first_events: Arc<StdMutex<Vec<String>>> = Arc::default();

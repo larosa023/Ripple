@@ -10,6 +10,8 @@ export interface Person {
   name: string;
   character: string;
   photo: string;
+  /** TMDB person id, when known: opens their page. */
+  tmdbId?: number;
 }
 
 const TMDB = 'https://api.themoviedb.org/3';
@@ -47,18 +49,20 @@ async function fromTmdb(meta: MetaDetail, key: string): Promise<Person[]> {
   if (!id) return [];
   if (isTv) {
     // aggregate_credits covers the whole run of the show, not just the latest season
-    const r = await tmdb<{ cast?: { name: string; profile_path?: string | null; roles?: { character?: string }[] }[] }>(
+    const r = await tmdb<{ cast?: { id: number; name: string; profile_path?: string | null; roles?: { character?: string }[] }[] }>(
       `/tv/${id}/aggregate_credits`,
       key,
     );
     return (r.cast ?? []).slice(0, 30).map((c) => ({
+      tmdbId: c.id,
       name: c.name,
       character: c.roles?.[0]?.character ?? '',
       photo: c.profile_path ? TMDB_IMG + c.profile_path : '',
     }));
   }
-  const r = await tmdb<{ cast?: { name: string; character?: string; profile_path?: string | null }[] }>(`/movie/${id}/credits`, key);
+  const r = await tmdb<{ cast?: { id: number; name: string; character?: string; profile_path?: string | null }[] }>(`/movie/${id}/credits`, key);
   return (r.cast ?? []).slice(0, 30).map((c) => ({
+    tmdbId: c.id,
     name: c.name,
     character: c.character ?? '',
     photo: c.profile_path ? TMDB_IMG + c.profile_path : '',
