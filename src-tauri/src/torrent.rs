@@ -489,8 +489,14 @@ mod tests {
             // Fetch the first 64 KB through our HTTP server.
             let url = s.url.trim_start_matches("http://");
             let (host, path) = url.split_once('/').unwrap();
+            // A web page pointing another name at 127.0.0.1 is refused.
+            let mut evil = TcpStream::connect(host).await.unwrap();
+            evil.write_all(format!("GET /{path} HTTP/1.1\r\nHost: evil.example:80\r\n\r\n").as_bytes()).await.unwrap();
+            let mut nope = Vec::new();
+            tokio::time::timeout(Duration::from_secs(10), evil.read_to_end(&mut nope)).await.unwrap().unwrap();
+            assert!(String::from_utf8_lossy(&nope).starts_with("HTTP/1.1 403"));
             let mut sock = TcpStream::connect(host).await.unwrap();
-            sock.write_all(format!("GET /{path} HTTP/1.1\r\nHost: x\r\nRange: bytes=0-65535\r\n\r\n").as_bytes())
+            sock.write_all(format!("GET /{path} HTTP/1.1\r\nHost: {host}\r\nRange: bytes=0-65535\r\n\r\n").as_bytes())
                 .await
                 .unwrap();
             let mut buf = Vec::new();
