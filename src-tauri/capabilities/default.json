@@ -18,6 +18,7 @@
     "core:window:allow-is-maximized",
     "core:window:allow-set-decorations",
     "opener:default",
+    "notification:default",
     {
       "identifier": "http:default",
       "allow": [

@@ -1,6 +1,7 @@
 mod discord;
 mod embed;
 mod player;
+mod torrent;
 mod updater;
 
 pub fn run() {
@@ -25,6 +26,13 @@ pub fn run() {
         )
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            if let Ok(dir) = app.path().app_cache_dir() {
+                torrent::init(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             player::play_external,
             player::detect_players,
@@ -34,7 +42,10 @@ pub fn run() {
             embed::player_stop,
             updater::check_update,
             updater::install_update,
-            discord::discord_set
+            discord::discord_set,
+            torrent::torrent_stream,
+            torrent::torrent_status,
+            torrent::torrent_stop_all
         ])
         .build(tauri::generate_context!())
         .expect("error while building Ripple")
@@ -42,6 +53,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 embed::shutdown();
                 discord::shutdown();
+                torrent::shutdown();
             }
         });
 }

@@ -11,6 +11,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 ## Features
 
 - **Every Stremio addon.** Install from any `manifest.json` or `stremio://` link, or import your entire addon collection from your Stremio account in one step.
+- **Explore addons**: browse Stremio's official and community addon lists right in Ripple and install with one click.
 - **Addon control.** Enable/disable, drag to reorder priority, open configure pages, update all manifests.
 - **Customize studio** (brush icon or `Ctrl+Shift+C`): a live slide-in editor for everything below.
   - **14 contrast-checked theme presets** (12 dark, 2 light) with live mini previews, quick accent colors, a full 7-color editor, **8 font pairings** and custom font upload, UI scale, corner radius, button shape.
@@ -29,8 +30,13 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Built-in player.** Videos play inside Ripple (powered by mpv, so MKV, HEVC, HDR and surround audio all work) with Ripple's own controls: seek bar with buffer, audio and subtitle track menus, subtitle size, speed, fullscreen, keyboard shortcuts, and resume where you left off. Subtitles from subtitle addons in your languages are added automatically.
 - **Binge mode.** A "Next episode" card near the credits with a countdown, using the same release (bingeGroup), addon and quality you were watching. Skip intro / recap buttons from the file's chapters and AniSkip (anime), or auto-skip.
 - **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
+- **Player extras**: chapter marks on the seek bar, Fit / Fill / Stretch picture (remembered), audio sync, screenshots to Pictures › Ripple, and a "stats for nerds" panel (resolution, HDR, codecs, bitrate, buffer, dropped frames).
 - **Subtitle styling**: font, size, color, outline / shadow / box, position, and a sync offset (`Z`/`X`) in the player.
 - **Mini player** (optional): shrink the video to a corner and keep browsing.
+- **Built-in torrent streaming.** P2P (torrent) streams play directly, with no Stremio Service needed: Ripple downloads only the file you're watching, prioritises what's about to play, shows peers and speed while it buffers, and deletes everything when you stop. (Prefer a Stremio streaming server? Switch in Settings → Playback.)
+- **Opens instantly.** Home rows and title pages are kept on disk and shown immediately on launch while fresh copies load in the background.
+- **People, collections and recommendations** (with a free TMDB key): click any cast member for their page and filmography, see the rest of a movie's franchise in order, and "More like this" on every title. Search finds people too, and remembers your recent searches.
+- **New episode alerts**: a Windows notification when a show you follow gets a new episode, and a count on Calendar.
 - **Live TV** from M3U / M3U8 playlists: add one by link, from a file, or with an Xtream Codes login. Channels are grouped like your provider groups them, with search, favorites, recently watched, and hideable groups. Add an XMLTV guide (`.xml` or `.xml.gz`, picked up automatically when the playlist names one) to see what's on now and next. Channel-specific user agents and referrers (`#EXTVLCOPT`, `#EXTHTTP`, `url|User-Agent=…`) are honored. In the player: `Page Up`/`Page Down` to flip channels, `G` for the channel list, and a Go live button after pausing. Link playlists refresh every 12 hours.
 - **Calendar** of new and upcoming episodes for the shows in your library.
 - **Integrations**: TMDB (cast photos, episode ratings), a Series Graph-style ratings heatmap on every show, Letterboxd (film links, diary import, CSV export), and an optional Discord "Watching" status.
@@ -39,7 +45,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Feels like a desktop app**: reopens at the same size and position, opening it again focuses the running window, Back returns you to where you were scrolled, and mouse Back/Forward buttons work everywhere (Back also closes the player).
 - **Built-in updates.** Ripple checks GitHub Releases on launch and offers a one-click upgrade when a newer version is published.
 - **Backup & restore** all settings, addons, and library to a single file.
-- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `?` all shortcuts, scroll wheel for volume, click the clock for time remaining, `Esc` back.
+- **Keyboard:** `Ctrl+K` or `/` to search, `Alt+←` to go back. In the player: `Space` play/pause, `←/→` seek 5s (`J/L` 10s), `↑/↓` volume, `M` mute, `F` fullscreen, `C` subtitles, `[ ]` speed, `0–9` jump, `S` skip intro, `Shift+N` next episode, `Z/X` subtitle sync, `Shift+Z/X` audio sync, `A` fit/fill/stretch, `P` screenshot, `I` stats, `?` all shortcuts, scroll wheel for volume, click the clock for time remaining, `Esc` back.
 
 ## Install
 

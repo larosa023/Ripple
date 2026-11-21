@@ -34,6 +34,12 @@ export interface Settings {
   playerPath: string;
   playerArgs: string;
   streamingServer: string;
+  /** P2P streams: Ripple's own engine, or a Stremio streaming server. */
+  torrentEngine: 'builtin' | 'server';
+  /** Picture sizing in the player. */
+  videoAspect: 'fit' | 'fill' | 'stretch';
+  /** Windows notification when a followed show has a new episode. */
+  notifyEpisodes: boolean;
   autoPlayBest: boolean;
   subtitleLangs: string;
   // Watching
@@ -91,6 +97,9 @@ export const DEFAULT_SETTINGS: Settings = {
   playerPath: '',
   playerArgs: '',
   streamingServer: 'http://127.0.0.1:11470',
+  torrentEngine: 'builtin',
+  videoAspect: 'fit',
+  notifyEpisodes: true,
   autoPlayBest: false,
   subtitleLangs: 'eng',
   autoplayNext: true,

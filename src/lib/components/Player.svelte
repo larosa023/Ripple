@@ -3,7 +3,7 @@
   // playing, so mpv's picture shows through everywhere this overlay is clear.
   import Icon from './Icon.svelte';
   import WindowControls from './WindowControls.svelte';
-  import { errorText, openExternal, playExternal } from '../player';
+  import { errorText, openExternal, playExternal, torrentStatus, type TorrentStatus } from '../player';
   import { filmUrl } from '../letterboxd';
   import { isTauri } from '../stremio/http';
   import { backdropOf } from '../stremio/images';
@@ -15,6 +15,12 @@
   import { SKIP_LABEL, type Segment } from '../skip';
   import {
     applySubStyle,
+    applyAspect,
+    ASPECT_LABEL,
+    cycleAspect,
+    screenshot,
+    setAudioDelay,
+    type Aspect,
     chooseAudio,
     chooseSub,
     layoutMini,
@@ -38,7 +44,8 @@
 
   let showUi = $state(true);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let menu: '' | 'subs' | 'audio' | 'speed' | 'channels' = $state('');
+  let menu: '' | 'subs' | 'audio' | 'speed' | 'channels' | 'more' = $state('');
+  let stats = $state(false);
   let hoverX = $state<number | null>(null);
   let scrubbing = $state(false);
   let bar: HTMLDivElement | undefined = $state();
@@ -136,6 +143,86 @@
     if (playback.loaded) applySubStyle();
   });
 
+  $effect(() => {
+    void settings.videoAspect;
+    if (playback.loaded) applyAspect();
+  });
+
+  // ---------- chapters on the seek bar ----------
+  const chapterMarks = $derived(
+    playback.duration > 0 ? playback.chapters.filter((c) => c.time > 1 && c.time < playback.duration - 1) : [],
+  );
+  function chapterAt(t: number): string {
+    let name = '';
+    for (const c of playback.chapters) if (c.time <= t) name = c.title ?? '';
+    return /^(chapter\s*)?\d+$/i.test(name.trim()) ? '' : name;
+  }
+
+  // ---------- screenshot ----------
+  async function snap() {
+    try {
+      const file = await screenshot();
+      toast(file ? `Screenshot saved: ${file.split(/[\\/]/).pop()}` : 'Screenshot saved to Pictures › Ripple', 'success', 2500);
+    } catch (e) {
+      toast(errorText(e), 'error', 4000);
+    }
+  }
+
+  // ---------- stats for nerds ----------
+  interface Stats { [k: string]: unknown }
+  let info = $state<Stats>({});
+  const STAT_PROPS = [
+    'video-params', 'video-codec', 'hwdec-current', 'container-fps', 'estimated-vf-fps', 'video-bitrate',
+    'audio-codec-name', 'audio-params', 'audio-bitrate', 'file-format', 'demuxer-cache-duration',
+    'frame-drop-count', 'decoder-frame-drop-count', 'file-size', 'width', 'height',
+  ];
+  $effect(() => {
+    if (!stats || !playback.active) return;
+    let alive = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // Next round only after this one finishes, so a slow player never builds up a queue of reads.
+    const tick = async () => {
+      const out: Stats = {};
+      for (const p of STAT_PROPS) {
+        if (!alive) return;
+        out[p] = await mpv('get_property', p);
+      }
+      if (!alive) return;
+      info = out;
+      t = setTimeout(tick, 1500);
+    };
+    void tick();
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  });
+  const statRows = $derived.by(() => {
+    const vp = (info['video-params'] ?? {}) as Record<string, unknown>;
+    const ap = (info['audio-params'] ?? {}) as Record<string, unknown>;
+    const kbps = (b: unknown) => (typeof b === 'number' && b > 0 ? (b >= 1e6 ? `${(b / 1e6).toFixed(1)} Mbps` : `${Math.round(b / 1000)} kbps`) : '');
+    const rows: [string, string][] = [];
+    const res = vp.w && vp.h ? `${vp.w}×${vp.h}` : '';
+    const hdr = vp.gamma === 'pq' ? 'HDR10 / PQ' : vp.gamma === 'hlg' ? 'HLG' : '';
+    rows.push(['Video', [res, String(info['video-codec'] ?? '').split(' ')[0], hdr, vp.pixelformat].filter(Boolean).join(' · ')]);
+    const fps = Number(info['estimated-vf-fps'] ?? info['container-fps'] ?? 0);
+    rows.push(['Frame rate', fps ? `${fps.toFixed(3).replace(/\.?0+$/, '')} fps` : '']);
+    rows.push(['Video bitrate', kbps(info['video-bitrate'])]);
+    rows.push(['Decoder', info['hwdec-current'] && info['hwdec-current'] !== 'no' ? `Hardware (${info['hwdec-current']})` : 'Software']);
+    rows.push(['Audio', [info['audio-codec-name'], ap['hr-channels'] ?? (ap['channel-count'] ? `${ap['channel-count']} ch` : ''), ap.samplerate ? `${Math.round(Number(ap.samplerate) / 100) / 10} kHz` : '', kbps(info['audio-bitrate'])].filter(Boolean).join(' · ')]);
+    rows.push(['Container', String(info['file-format'] ?? '')]);
+    const size = Number(info['file-size'] ?? 0);
+    rows.push(['File size', size ? `${(size / 1073741824).toFixed(2)} GB` : '']);
+    const cache = Number(info['demuxer-cache-duration'] ?? 0);
+    rows.push(['Buffered ahead', cache ? `${cache.toFixed(1)} s` : '']);
+    const drops = Number(info['frame-drop-count'] ?? 0) + Number(info['decoder-frame-drop-count'] ?? 0);
+    rows.push(['Dropped frames', String(drops)]);
+    if (playback.source?.torrent && tstat) {
+      rows.push(['Torrent', `${tstat.peers} peers · ${fmtRate(tstat.downloadSpeed)} · ${tstat.total ? Math.round((tstat.downloaded / tstat.total) * 100) : 0}% downloaded`]);
+    }
+    return rows.filter(([, v]) => v && v !== 'undefined');
+  });
+
   // Mouse Back button closes the full-size player instead of navigating behind it.
   $effect(() => {
     const onMouseNav = (e: Event) => {
@@ -186,6 +273,23 @@
   const progress = $derived(playback.duration ? (playback.time / playback.duration) * 100 : 0);
   const buffered = $derived(playback.duration ? Math.min(100, ((playback.time + playback.cacheTime) / playback.duration) * 100) : 0);
   const loading = $derived(!playback.error && (!playback.ready || playback.buffering) && !playback.ended);
+
+  // Built-in torrent engine: peers and speed while it buffers (and in the stats panel).
+  let tstat = $state<TorrentStatus | null>(null);
+  $effect(() => {
+    const hash = playback.source?.torrent;
+    const watch = loading || stats;
+    if (!hash || !watch) return;
+    let live = true;
+    const tick = () => torrentStatus(hash).then((s) => live && (tstat = s)).catch(() => {});
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  });
+  const fmtRate = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB/s` : `${Math.round(b / 1024)} KB/s`);
   const customChrome = $derived(isTauri && !settings.nativeTitleBar && !playback.fullscreen);
   const volIcon = $derived(playback.muted || playback.volume === 0 ? 'mute' : playback.volume < 50 ? 'volumeLow' : 'volume');
 
@@ -300,12 +404,26 @@
     } else if ((k === 'n' || k === 'N') && e.shiftKey && playback.next) {
       handled();
       void playNext();
+    } else if ((k === 'z' || k === 'Z' || k === 'x' || k === 'X') && e.shiftKey) {
+      handled();
+      setAudioDelay(playback.audioDelay + (k.toLowerCase() === 'x' ? 0.1 : -0.1));
+      toast(`Audio sync ${playback.audioDelay > 0 ? '+' : ''}${playback.audioDelay.toFixed(1)}s`, 'info', 1200);
     } else if (k === 'z' || k === 'Z' || k === 'x' || k === 'X') {
       handled();
       setSubDelay(playback.subDelay + (k.toLowerCase() === 'x' ? 0.1 : -0.1));
+    } else if (k === 'a' || k === 'A') {
+      handled();
+      toast(`Picture: ${ASPECT_LABEL[cycleAspect()]}`, 'info', 1200);
+    } else if (k === 'p' || k === 'P') {
+      handled();
+      void snap();
+    } else if (k === 'i' || k === 'I') {
+      handled();
+      stats = !stats;
     } else if (k === 'Escape') {
       handled();
       if (help) help = false;
+      else if (stats) stats = false;
       else if (menu) menu = '';
       else if (playback.fullscreen) setFullscreen(false);
       else closePlayer();
@@ -325,7 +443,7 @@
     const src = playback.source;
     const title = playback.subtitle ? `${playback.title} — ${playback.subtitle}` : playback.title;
     if (!src) return;
-    await closePlayer();
+    await closePlayer(true, src.torrent); // the external player keeps streaming the torrent
     try {
       await playExternal(src, title);
     } catch (e) {
@@ -399,11 +517,13 @@
         <dl>
           {#each live ? [
             ['Space / K', 'Play / pause'], ['Page Up / Down', 'Previous / next channel'], ['G', 'Channel list'], ['↑ / ↓ or scroll', 'Volume'],
-            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
+            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
+            ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
           ] : [
             ['Space / K', 'Play / pause'], ['← / →', 'Back / forward 5s'], ['J / L', 'Back / forward 10s'], ['↑ / ↓ or scroll', 'Volume'],
             ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
-            ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'], ['Shift + N', 'Next episode'],
+            ['Shift + Z / X', 'Audio earlier / later'], ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'],
+            ['Shift + N', 'Next episode'], ['A', 'Fit / fill / stretch'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
           ] as [k, d] (k)}
             <dt>{k}</dt><dd>{d}</dd>
@@ -424,7 +544,7 @@
     </header>
 
     {#if loading}
-      <div class="center"><div class="ring"></div>{#if playback.cachePct > 0 && playback.cachePct < 100}<span>{playback.cachePct}%</span>{/if}</div>
+      <div class="center"><div class="ring"></div>{#if playback.cachePct > 0 && playback.cachePct < 100}<span>{playback.cachePct}%</span>{/if}{#if playback.source?.torrent && tstat}<span class="peers">{tstat.peers ? `${tstat.peers} ${tstat.peers === 1 ? 'peer' : 'peers'} · ${fmtRate(tstat.downloadSpeed)}` : 'Looking for peers…'}</span>{/if}</div>
     {/if}
     {#if flash}
       <div class="center flash" aria-hidden="true">
@@ -524,6 +644,15 @@
       </div>
     {/if}
 
+    {#if stats}
+      <div class="stats" role="dialog" aria-label="Stats for nerds">
+        <div class="sh">Stats for nerds <button class="ctl s" onclick={() => (stats = false)} aria-label="Close"><Icon name="x" size={14} /></button></div>
+        <dl>
+          {#each statRows as [k, v] (k)}<dt>{k}</dt><dd>{v}</dd>{/each}
+        </dl>
+      </div>
+    {/if}
+
     <footer class="bottom">
       {#if live}
       <div class="livebar">
@@ -547,10 +676,12 @@
         <div class="track">
           <div class="buf" style:width="{buffered}%"></div>
           <div class="fill" style:width="{progress}%"></div>
+          {#each chapterMarks as c, i (i)}<i class="chap" style:left="{(c.time / playback.duration) * 100}%"></i>{/each}
         </div>
         <div class="knob" style:left="{progress}%"></div>
         {#if hoverX !== null && playback.duration}
-          <div class="tip" style:left="{hoverX * 100}%">{fmtTime(hoverX * playback.duration)}</div>
+          {@const chap = chapterMarks.length ? chapterAt(hoverX * playback.duration) : ''}
+          <div class="tip" style:left="{hoverX * 100}%">{#if chap}<span class="tchap">{chap}</span>{/if}{fmtTime(hoverX * playback.duration)}</div>
         {/if}
       </div>
       {/if}
@@ -657,6 +788,31 @@
           {/if}
         </div>
 
+        <div class="menu-wrap">
+          <button class="ctl" class:on={menu === 'more' || stats} onclick={() => (menu = menu === 'more' ? '' : 'more')} title="More"><Icon name="dots" size={20} /></button>
+          {#if menu === 'more'}
+            <div class="menu">
+              {#if !live}
+                <div class="mh">Picture <span class="key">A</span></div>
+                <div class="seg3">
+                  {#each ['fit', 'fill', 'stretch'] as a (a)}
+                    <button class:sel={settings.videoAspect === a} onclick={() => (settings.videoAspect = a as Aspect)}>{ASPECT_LABEL[a as Aspect].replace(' (crop)', '')}</button>
+                  {/each}
+                </div>
+              {/if}
+              <div class="sizer">
+                <span title="Shift audio earlier or later (Shift+Z / Shift+X)">Audio sync</span>
+                <button onclick={() => setAudioDelay(playback.audioDelay - 0.1)} aria-label="Audio earlier">−</button>
+                <b class:off={playback.audioDelay !== 0}>{playback.audioDelay > 0 ? '+' : ''}{playback.audioDelay.toFixed(1)}s</b>
+                <button onclick={() => setAudioDelay(playback.audioDelay + 0.1)} aria-label="Audio later">+</button>
+                {#if playback.audioDelay !== 0}<button class="reset" onclick={() => setAudioDelay(0)} title="Reset sync">↺</button>{/if}
+              </div>
+              <button onclick={() => { menu = ''; void snap(); }}>Take screenshot <span class="key">P</span></button>
+              <button class:sel={stats} onclick={() => { stats = !stats; menu = ''; }}>Stats for nerds <span class="key">I</span></button>
+            </div>
+          {/if}
+        </div>
+
         <button class="ctl" onclick={toggleFullscreen} title="Fullscreen (F)"><Icon name={playback.fullscreen ? 'shrink' : 'expand'} size={20} /></button>
       </div>
     </footer>
@@ -732,7 +888,26 @@
   .tip {
     position: absolute; bottom: 24px; transform: translateX(-50%); padding: 3px 7px; border-radius: 6px;
     background: rgb(0 0 0 / 0.85); font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; white-space: nowrap;
   }
+  .tchap { font-weight: 700; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .chap { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgb(0 0 0 / 0.55); }
+  .seg3 { display: flex; gap: 4px; padding: 2px 6px 8px; }
+  .seg3 button { flex: 1; border: 0; border-radius: 7px; padding: 6px 8px; background: rgb(255 255 255 / 0.08); color: #fff; font: 600 12.5px var(--font); cursor: pointer; }
+  .seg3 button:hover { background: rgb(255 255 255 / 0.16); }
+  .seg3 button.sel { background: var(--accent); color: var(--on-accent); }
+  .key { margin-left: auto; padding: 0 6px; border-radius: 4px; background: rgb(255 255 255 / 0.12); font: 700 11px var(--font); color: rgb(255 255 255 / 0.7); }
+  .mh .key { margin-left: 6px; }
+  .stats {
+    position: absolute; left: 16px; top: 76px; z-index: 3; width: min(420px, calc(100% - 32px)); padding: 10px 14px 12px;
+    background: rgb(10 10 14 / 0.86); border: 1px solid rgb(255 255 255 / 0.1); border-radius: 12px; backdrop-filter: blur(12px);
+    font-size: 12.5px; color: #fff;
+  }
+  .sh { display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: rgb(255 255 255 / 0.6); margin-bottom: 6px; }
+  .stats dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+  .stats dt { color: rgb(255 255 255 / 0.55); }
+  .stats dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+  .peers { font-size: 12.5px; color: rgb(255 255 255 / 0.75); margin-top: 4px; }
 
   .controls { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
   .spacer { flex: 1; }
@@ -785,6 +960,7 @@
     background: none; color: #fff; font-size: 13px; cursor: pointer;
   }
   .menu > button:hover { background: rgb(255 255 255 / 0.1); }
+  .menu > button:has(.key) { display: flex; align-items: center; }
   .menu > button.sel::before { content: ''; position: absolute; left: 11px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--accent); }
   .sizer { display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid rgb(255 255 255 / 0.1); font-size: 12.5px; }
   .sizer span { flex: 1; color: rgb(255 255 255 / 0.6); }

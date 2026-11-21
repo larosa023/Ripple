@@ -16,6 +16,7 @@
   import { isTauri } from '../stremio/http';
   import { settings } from '../stores/settings.svelte';
   import { href, router, type RouteName } from '../stores/router.svelte';
+  import { newCount } from '../episodes.svelte';
   import { look } from '../theme/look.svelte';
   import { openStudio, ui } from '../stores/ui.svelte';
 
@@ -43,6 +44,7 @@
       <a class="item" class:active={active(item.id)} href={href(item.id)} title={m.label}>
         <Icon name={m.icon} size={iconSize} stroke={iconStroke} />
         {#if labels}<span>{m.label}</span>{/if}
+        {#if item.id === 'calendar' && newCount() > 0}<i class="count" aria-label="{newCount()} new episodes">{newCount() > 9 ? '9+' : newCount()}</i>{/if}
       </a>
     {/each}
   </div>
@@ -69,7 +71,13 @@
   .brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
   .word { font-family: var(--font-display); font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
   .items, .end { display: flex; gap: 4px; }
+  .count {
+    position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+    background: var(--accent); color: var(--on-accent); font: 800 10px/16px var(--font); font-style: normal; text-align: center;
+    pointer-events: none;
+  }
   .item {
+    position: relative;
     display: flex; align-items: center; gap: 10px; border: 0; background: none; cursor: pointer;
     color: var(--text-3); font-weight: 600; transition: color var(--dur), background var(--dur);
     border-radius: min(var(--btn-radius), 12px);

@@ -35,6 +35,8 @@ export interface Manifest {
   background?: string;
   types: string[];
   catalogs: CatalogDef[];
+  /** Lists of other addons (Stremio's addon_catalog resource). */
+  addonCatalogs?: CatalogDef[];
   resources: (ResourceName | ResourceDef)[];
   idPrefixes?: string[];
   behaviorHints?: {

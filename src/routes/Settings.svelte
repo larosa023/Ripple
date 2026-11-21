@@ -348,12 +348,23 @@
             <SettingRow title="Auto-play top stream" description="Start playing the best stream as soon as every addon has answered.">
               <Switch bind:checked={settings.autoPlayBest} label="Auto-play top stream" />
             </SettingRow>
+            <SettingRow title="New episode alerts" description="A Windows notification when a show in your library or Continue watching gets a new episode. Calendar shows the count either way.">
+              <Switch bind:checked={settings.notifyEpisodes} label="New episode alerts" />
+            </SettingRow>
           </div>
 
           <div class="group">
-            <SettingRow title="Streaming server" description="Only needed for torrent (P2P) streams. Stremio Service runs one at http://127.0.0.1:11470. Debrid and direct links don't use it." wide>
-              <input class="input mono" bind:value={settings.streamingServer} spellcheck="false" />
+            <SettingRow title="Torrent (P2P) streams" description="Ripple streams torrents itself, downloading only the file you're watching and deleting it when you stop. Or use a Stremio streaming server (Stremio Service). Debrid and direct links use neither.">
+              <select class="select" bind:value={settings.torrentEngine}>
+                <option value="builtin">Built-in engine</option>
+                <option value="server">Streaming server</option>
+              </select>
             </SettingRow>
+            {#if settings.torrentEngine === 'server'}
+              <SettingRow title="Streaming server address" description="Stremio Service runs one at http://127.0.0.1:11470." wide>
+                <input class="input mono" bind:value={settings.streamingServer} spellcheck="false" />
+              </SettingRow>
+            {/if}
           </div>
 
         {:else if section === 'streams'}
@@ -497,7 +508,7 @@
               </div>
             </SettingRow>
             <SettingRow title="Clear cache" description="Forget cached catalogs, details and streams so everything reloads fresh.">
-              <button class="btn sm" onclick={() => { clearCache(); toast('Cache cleared', 'success'); }}>Clear</button>
+              <button class="btn sm" onclick={() => { clearCache(true); toast('Cache cleared', 'success'); }}>Clear</button>
             </SettingRow>
           </div>
 

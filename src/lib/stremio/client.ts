@@ -1,3 +1,4 @@
+import { getBlob, pruneBlobs, putBlob } from '../blobs';
 import { getJson } from './http';
 import type {
   CatalogDef,
@@ -64,9 +65,48 @@ function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<
   return value;
 }
 
-export function clearCache() {
+export function clearCache(alsoSaved = false) {
   cache.clear();
+  if (alsoSaved) void pruneBlobs(DISK_PREFIX, -1);
 }
+
+/**
+ * Like `cached`, but also keeps the answer on disk. On the next launch the saved copy is shown
+ * instantly (if it's younger than `maxStaleMs`) while a fresh copy loads in the background for
+ * next time. That's what makes Home and title pages appear immediately.
+ */
+function persisted<T>(key: string, ttlMs: number, maxStaleMs: number, load: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.value as Promise<T>;
+  const diskKey = DISK_PREFIX + key;
+  const fetchAndStore = () =>
+    load().then((v) => {
+      void putBlob(diskKey, { at: Date.now(), v });
+      return v;
+    });
+  const value = getBlob<{ at: number; v: T }>(diskKey)
+    .catch(() => undefined)
+    .then((saved) => {
+      if (saved && Date.now() - saved.at < maxStaleMs) {
+        // Show the saved copy now; refresh quietly (a failure just keeps the saved copy).
+        fetchAndStore()
+          .then((v) => cache.set(key, { at: Date.now(), ttl: ttlMs, value: Promise.resolve(v) }))
+          .catch(() => {});
+        return saved.v;
+      }
+      return fetchAndStore();
+    })
+    .catch((e) => {
+      cache.delete(key); // never cache failures
+      throw e;
+    });
+  cache.set(key, { at: Date.now(), ttl: ttlMs, value });
+  return value;
+}
+
+const DISK_PREFIX = 'http:';
+// Forget saved answers older than a week.
+setTimeout(() => void pruneBlobs(DISK_PREFIX, 7 * 86_400_000), 15_000);
 
 let requestTimeout = 12000;
 export function setRequestTimeout(ms: number) {
@@ -127,7 +167,9 @@ export function getCatalog(
   extra?: Record<string, string | number | undefined>,
 ): Promise<MetaPreview[]> {
   const url = resourceUrl(addon, 'catalog', type, id, extra);
-  return cached(url, 10 * 60_000, () =>
+  // Search results aren't worth keeping on disk; board and genre lists are.
+  const keep = extra?.search ? cached : (k: string, t: number, l: () => Promise<MetaPreview[]>) => persisted(k, t, 12 * 3600_000, l);
+  return keep(url, 10 * 60_000, () =>
     getJson<{ metas?: MetaPreview[] }>(url, requestTimeout).then((r) =>
       uniqueBy((Array.isArray(r.metas) ? r.metas : []).filter((m) => m && typeof m.id === 'string' && m.id), (m) => m.id),
     ),
@@ -146,13 +188,14 @@ export function uniqueBy<T>(list: T[], key: (x: T) => string): T[] {
 }
 
 /** First enabled addon that can resolve the meta wins (addon order = priority). */
-export async function getMeta(addons: InstalledAddon[], type: string, id: string): Promise<MetaDetail> {
+/** `fresh`: skip the saved copy (for checks that must see the latest episode list). */
+export async function getMeta(addons: InstalledAddon[], type: string, id: string, fresh = false): Promise<MetaDetail> {
   const candidates = addons.filter((a) => a.enabled && supports(a, 'meta', type, id));
   let lastErr: unknown = new Error('No installed addon can show details for this item.');
   for (const a of candidates) {
     const url = resourceUrl(a, 'meta', type, id);
     try {
-      const meta = await cached(url, 30 * 60_000, () =>
+      const meta = await persisted(url, fresh ? 0 : 30 * 60_000, fresh ? 0 : 6 * 3600_000, () =>
         getJson<{ meta?: MetaDetail }>(url, requestTimeout).then((r) => {
           if (!r.meta) throw new Error('Empty meta');
           const m = r.meta;
@@ -213,4 +256,25 @@ export async function getSubtitles(addons: InstalledAddon[], type: string, id: s
     }),
   );
   return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+}
+
+export interface DirectoryAddon {
+  transportUrl: string;
+  manifest: Manifest;
+}
+
+/**
+ * Addons listed by an addon catalog (Stremio's "Official" and "Community" lists come from
+ * Cinemeta this way). Kept on disk for a day.
+ */
+export function getAddonCatalog(transportUrl: string, type: string, id: string): Promise<DirectoryAddon[]> {
+  const url = `${baseUrl(transportUrl)}/addon_catalog/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
+  return persisted(url, 60 * 60_000, 24 * 3600_000, () =>
+    getJson<{ addons?: { transportUrl?: string; manifest?: Manifest }[] }>(url, requestTimeout).then((r) =>
+      uniqueBy(
+        (r.addons ?? []).filter((a): a is DirectoryAddon => !!a?.transportUrl && !!a.manifest?.id && !!a.manifest.name),
+        (a) => a.transportUrl,
+      ),
+    ),
+  );
 }

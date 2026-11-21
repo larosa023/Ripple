@@ -1,7 +1,7 @@
 // Live TV: your M3U playlists, their channels, the guide, favorites and recently watched.
 import { load, save } from '../stores/persist';
 import { getBytes, getText } from '../stremio/http';
-import { delBlob, getBlob, putBlob } from './blobs';
+import { delBlob, getBlob, putBlob } from '../blobs';
 import { looksLikeM3U, parseM3U, type Channel } from './m3u';
 import { onAt, type Guide, type Programme } from './xmltv';
 
