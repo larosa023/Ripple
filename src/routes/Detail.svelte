@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { openTrailer } from '../lib/trailer.svelte';
+  import { scoresFor, type Scores } from '../lib/omdb';
   import Icon from '../lib/components/Icon.svelte';
   import Sources from '../lib/components/Sources.svelte';
   import { dragScroll } from '../lib/actions/dragScroll';
@@ -79,11 +81,25 @@
     };
   });
 
+  // Rotten Tomatoes / Metacritic (OMDb key needed).
+  let scores = $state<Scores | null>(null);
+  $effect(() => {
+    const id = meta?.imdb_id || (meta?.id.startsWith('tt') ? meta.id.split(':')[0] : '');
+    scores = null;
+    if (!id || !settings.omdbKey.trim()) return;
+    let live = true;
+    void scoresFor(id).then((s) => live && (scores = s));
+    return () => {
+      live = false;
+    };
+  });
+  const imdbScore = $derived(meta?.imdbRating || scores?.imdb || '');
+
   // "More like this" and the movie's collection (TMDB key needed).
-  let extras = $state<TitleExtras>({ recommended: [], collection: null });
+  let extras = $state<TitleExtras>({ recommended: [], collection: null, score: null });
   $effect(() => {
     const m = meta;
-    extras = { recommended: [], collection: null };
+    extras = { recommended: [], collection: null, score: null };
     if (!m || !hasTmdb()) return;
     let live = true;
     titleExtras(m)
@@ -300,7 +316,16 @@
             {#if meta.releaseInfo ?? meta.year}<span>{meta.releaseInfo ?? meta.year}</span>{/if}
             {#if meta.runtime}<span>{meta.runtime.replace(/\s*min$/, 'm')}</span>{/if}
             {#if meta.certification}<span class="cert">{meta.certification}</span>{/if}
-            {#if meta.imdbRating}<span class="imdb"><b>IMDb</b>{meta.imdbRating}</span>{/if}
+            {#if imdbScore}<span class="score imdb" title="IMDb rating"><b>IMDb</b>{imdbScore}</span>{/if}
+            {#if scores?.rt != null}
+              <span class="score rt" class:rotten={scores.rt < 60} title="Rotten Tomatoes (Tomatometer)">
+                <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">{#if scores.rt >= 60}<circle cx="8" cy="9" r="6" fill="#fa320a" /><path d="M5.5 3.2c1 .2 1.8.8 2.3 1.6.6-.9 1.6-1.4 2.7-1.4-.7.4-1.1 1-1.3 1.7 1.1-.2 2 0 2.6.6-1.2-.2-2.3.1-3 .8-.9-.8-2-1.1-3.2-.9.6-.5 1.3-.8 2-.8-.6-.5-1.3-1-2.1-1.6z" fill="#00912d" />{:else}<path d="M8 2l1.6 3.4 3.7-.6-2.4 2.8 2.5 2.7-3.7-.4L8 13.5 6.3 9.9l-3.7.4 2.5-2.7L2.7 4.8l3.7.6z" fill="#0ac855" />{/if}</svg>{scores.rt}%
+              </span>
+            {/if}
+            {#if scores?.mc != null}
+              <span class="score mc" class:mid={scores.mc < 61 && scores.mc >= 40} class:low={scores.mc < 40} title="Metacritic (Metascore)"><b>{scores.mc}</b></span>
+            {/if}
+            {#if extras.score != null}<span class="score tmdb" title="TMDB user score"><b>TMDB</b>{extras.score}%</span>{/if}
           </div>
           {#if meta.genres?.length}<div class="genres">{meta.genres.join(' • ')}</div>{/if}
           {#if meta.description}<p class="desc">{meta.description}</p>{/if}
@@ -309,6 +334,11 @@
             {#if playTarget}
               <button class="play" onclick={() => openSources(playTarget!)}>
                 <Icon name="play" size={16} fill />{playTarget.text}
+              </button>
+            {/if}
+            {#if trailers.length}
+              <button class="trailer-btn" onclick={() => openTrailer(trailers[0].id, `${meta!.name} · ${trailers[0].title}`)}>
+                <Icon name="film" size={16} />Trailer
               </button>
             {/if}
             <div class="more-wrap">
@@ -471,7 +501,7 @@
           <h2>Trailers</h2>
           <div class="trailers" use:dragScroll>
             {#each trailers as t (t.id)}
-              <button class="trailer" onclick={() => openExternal(`https://www.youtube.com/watch?v=${t.id}`)} title="Watch on YouTube">
+              <button class="trailer" onclick={() => openTrailer(t.id, `${meta?.name ?? ''} · ${t.title}`)} title="Play trailer">
                 <span class="tthumb">
                   <img src={`https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`} alt="" loading="lazy" />
                   <span class="tplay"><Icon name="play" size={18} fill /></span>
@@ -530,7 +560,21 @@
 
   .facts { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 14px; }
   .cert { padding: 0 5px; border: 1.5px solid var(--text-2); border-radius: 4px; font-size: 11.5px; line-height: 17px; color: var(--text-2); }
-  .imdb { display: inline-flex; align-items: center; gap: 6px; color: #f5c518; }
+  .trailer-btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 20px; border-radius: 999px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--text) 22%, transparent); background: color-mix(in srgb, var(--bg) 40%, transparent);
+    color: var(--text); font: 700 15px var(--font); backdrop-filter: blur(10px); transition: background var(--dur), border-color var(--dur);
+  }
+  .trailer-btn:hover { background: color-mix(in srgb, var(--text) 12%, transparent); border-color: color-mix(in srgb, var(--text) 40%, transparent); }
+  .score { display: inline-flex; align-items: center; gap: 6px; }
+  .imdb { color: #f5c518; }
+  .rt { color: #fa6a4a; gap: 4px; }
+  .rt.rotten { color: #33d07a; }
+  .mc b { min-width: 24px; height: 22px; display: grid; place-items: center; padding: 0 4px; border-radius: 4px; background: #00ce7a; color: #fff; font-size: 12.5px; font-weight: 800; }
+  .mc.mid b { background: #ffbd3f; color: #222; }
+  .mc.low b { background: #ff6874; }
+  .tmdb { color: #01b4e4; }
+  .tmdb b { background: linear-gradient(90deg, #90cea1, #01b4e4); color: #0d253f; font-size: 10.5px; font-weight: 900; padding: 1px 4px; border-radius: 3px; }
   .imdb b { background: #f5c518; color: #000; font-size: 10.5px; font-weight: 900; padding: 1px 4px; border-radius: 3px; letter-spacing: -0.01em; }
   .genres { margin-top: 6px; font-size: 13.5px; color: var(--text-2); font-weight: 600; }
   .desc { margin: 14px 0 0; font-size: 15px; line-height: 1.6; max-width: 62ch; text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 70%, transparent); }

@@ -7,6 +7,7 @@
     live: { label: 'Live TV', icon: 'tv' },
     calendar: { label: 'Calendar', icon: 'calendar' },
     downloads: { label: 'Downloads', icon: 'download' },
+    stats: { label: 'Your stats', icon: 'chart' },
     addons: { label: 'Addons', icon: 'puzzle' },
   };
 </script>

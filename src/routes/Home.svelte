@@ -11,6 +11,10 @@
   import { href } from '../lib/stores/router.svelte';
   import { settings } from '../lib/stores/settings.svelte';
   import { look } from '../lib/theme/look.svelte';
+  import UpNextRow from '../lib/components/UpNextRow.svelte';
+  import PosterRow from '../lib/components/PosterRow.svelte';
+  import { becauseYouWatched, refreshUpNext, upNext, type ForYouRow } from '../lib/upnext.svelte';
+  import { playback } from '../lib/stores/playback.svelte';
 
   const available = $derived(boardCatalogs(addons.list, settings.hideAdultAddons));
 
@@ -29,6 +33,23 @@
       })
       .filter((b) => !!b),
   );
+
+  // Up Next refreshes when you finish something (watched list changes) or close the player.
+  $effect(() => {
+    void library.watched.length;
+    void library.history.length;
+    if (settings.showUpNext && !playback.active) void refreshUpNext();
+  });
+  let forYou: ForYouRow[] = $state([]);
+  $effect(() => {
+    void library.watched.length;
+    void settings.tmdbKey;
+    if (!settings.showForYou) {
+      forYou = [];
+      return;
+    }
+    void becauseYouWatched(2).then((r) => (forYou = r));
+  });
 
   const heroSource = $derived(
     available.find((b) => b.key === look.heroSource) ?? rows[0] ?? available[0],
@@ -62,8 +83,15 @@
     </section>
   {/if}
 
-  {#each rows as row (row.key)}
+  {#if settings.showUpNext}<UpNextRow items={upNext.items} />{/if}
+
+  {#each rows as row, i (row.key)}
     <CatalogRow addon={row.addon} catalog={row.catalog} title={row.title} display={row.display} />
+    {#if i === 0}
+      {#each forYou as r (r.seed.id)}
+        <div class="fy"><PosterRow title={`Because you watched ${r.seed.name}`} items={r.items} /></div>
+      {/each}
+    {/if}
   {:else}
     <div class="empty">
       <p>No catalogs to show yet.</p>
@@ -74,6 +102,7 @@
 
 <style>
   .cw { margin-bottom: var(--row-gap); }
+  .fy :global(.prow) { margin-bottom: var(--row-gap); }
   h2 { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
   .cw-item { position: relative; flex-shrink: 0; }
   .cw-remove {

@@ -68,6 +68,16 @@ export interface Settings {
   wheelAction: 'volume' | 'seek' | 'off';
   /** What double-clicking the video does. */
   dblClick: 'fullscreen' | 'seek' | 'off';
+  /** Home: next unwatched episode of each show you follow. */
+  showUpNext: boolean;
+  /** Home: "Because you watched…" recommendation rows (needs a TMDB key). */
+  showForYou: boolean;
+  /** Keep this many upcoming episodes of shows you're watching downloaded (0 = off). */
+  autoDownloadNext: number;
+  /** OMDb key for Rotten Tomatoes and Metacritic scores. */
+  omdbKey: string;
+  /** Home banner plays the trailer (muted) instead of a still picture. */
+  heroTrailers: boolean;
   /** Try another source automatically when one fails or stalls. */
   autoSwitch: boolean;
   /** Show a frame preview when hovering the seek bar. */
@@ -145,6 +155,11 @@ export const DEFAULT_SETTINGS: Settings = {
   dblClick: 'fullscreen',
   showEndsAt: true,
   autoSwitch: true,
+  showUpNext: true,
+  showForYou: true,
+  autoDownloadNext: 0,
+  omdbKey: '',
+  heroTrailers: false,
   seekPreviews: true,
   downloadDir: '',
   downloadAutoDelete: false,

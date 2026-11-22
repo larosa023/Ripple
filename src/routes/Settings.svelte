@@ -3,6 +3,7 @@
   import Icon from '../lib/components/Icon.svelte';
   import { isTauri } from '../lib/stremio/http';
   import { revealDownload } from '../lib/downloads.svelte';
+  import { testOmdbKey } from '../lib/omdb';
   import SettingRow from '../lib/components/SettingRow.svelte';
   import Switch from '../lib/components/Switch.svelte';
   import { detectPlayers, errorText, installMpv, openExternal, type DetectedPlayer } from '../lib/player';
@@ -155,6 +156,23 @@
     } else {
       tmdbState = 'bad';
     }
+  }
+
+  let omdbDraft = $state(settings.omdbKey);
+  let omdbState = $state<'' | 'checking' | 'ok' | 'bad'>(settings.omdbKey ? 'ok' : '');
+  async function saveOmdb() {
+    const key = omdbDraft.trim();
+    if (!key) {
+      settings.omdbKey = '';
+      omdbState = '';
+      return;
+    }
+    omdbState = 'checking';
+    if (await testOmdbKey(key)) {
+      settings.omdbKey = key;
+      omdbState = 'ok';
+      toast('OMDb connected — Rotten Tomatoes and Metacritic scores are on', 'success');
+    } else omdbState = 'bad';
   }
 
   async function manualCheck() {
@@ -452,6 +470,23 @@
               {#if tmdbState === 'ok' && settings.tmdbKey}<span class="ready"><span class="ok-dot static"></span>Connected</span>{/if}
               {#if tmdbState === 'bad'}<span class="bad">TMDB didn't accept that key. Copy the "API Key" or "API Read Access Token" exactly.</span>{/if}
             </SettingRow>
+            <SettingRow
+              title="OMDb"
+              description="Adds Rotten Tomatoes and Metacritic scores to title pages. Free key (1,000 lookups a day; each title is looked up at most once a week)."
+              wide
+            >
+              <div class="tmdb">
+                <input class="input" placeholder="OMDb API key" bind:value={omdbDraft} onkeydown={(e) => e.key === 'Enter' && saveOmdb()} spellcheck="false" autocomplete="off" />
+                <button class="btn sm primary" disabled={omdbState === 'checking' || omdbDraft.trim() === settings.omdbKey} onclick={saveOmdb}>
+                  {omdbState === 'checking' ? 'Checking…' : omdbDraft.trim() ? 'Save' : 'Remove'}
+                </button>
+                <button class="btn sm ghost" onclick={() => openExternal('https://www.omdbapi.com/apikey.aspx')}>
+                  <Icon name="external" size={14} />Get a free key
+                </button>
+              </div>
+              {#if omdbState === 'ok' && settings.omdbKey}<span class="ready"><span class="ok-dot static"></span>Connected</span>{/if}
+              {#if omdbState === 'bad'}<span class="bad">OMDb didn't accept that key. Use the key from the email OMDb sent (after clicking its activation link).</span>{/if}
+            </SettingRow>
           </div>
 
           <div class="group">
@@ -533,6 +568,14 @@
                 <input class="input" placeholder={dlDefault} bind:value={settings.downloadDir} spellcheck="false" />
                 <button class="btn sm" onclick={() => revealDownload(null)}><Icon name="folder" size={14} />Open</button>
               </div>
+            </SettingRow>
+            <SettingRow title="Keep next episodes downloaded" description="For shows you've watched in the last 3 weeks, quietly download the next episodes so they're ready to play instantly. Pairs well with Delete after watching.">
+              <select class="select" bind:value={settings.autoDownloadNext}>
+                <option value={0}>Off</option>
+                <option value={1}>Next episode</option>
+                <option value={2}>Next 2 episodes</option>
+                <option value={3}>Next 3 episodes</option>
+              </select>
             </SettingRow>
             <SettingRow title="Delete after watching" description="Remove a download once you've finished watching it, to free up space.">
               <Switch bind:checked={settings.downloadAutoDelete} label="Delete downloads after watching" />

@@ -78,10 +78,11 @@ export async function downloadFolder(): Promise<string> {
 export const canDownload = (s: SourcedStream) => !!s.infoHash || /^https?:\/\//i.test(s.url ?? '');
 
 /** Starts downloading a stream of an episode or movie. */
-export async function startDownload(s: SourcedStream, meta: MetaDetail, videoId: string, label: string) {
+export async function startDownload(s: SourcedStream, meta: MetaDetail, videoId: string, label: string, quiet = false) {
   if (!isTauri) return;
   const existing = downloadOf(videoId);
   if (existing) {
+    if (quiet) return;
     toast(existing.status === 'done' ? 'Already downloaded.' : 'Already downloading.', 'info', 4000, { label: 'View', run: () => go('downloads') });
     return;
   }
@@ -110,7 +111,7 @@ export async function startDownload(s: SourcedStream, meta: MetaDetail, videoId:
     }
     source = { kind: 'http', url, headers };
   } else {
-    toast("This source can't be downloaded. Try another one.", 'error', 5000);
+    if (!quiet) toast("This source can't be downloaded. Try another one.", 'error', 5000);
     return;
   }
   try {
@@ -127,9 +128,9 @@ export async function startDownload(s: SourcedStream, meta: MetaDetail, videoId:
         ext: null,
       },
     });
-    toast(`Downloading ${label || meta.name}`, 'success', 5000, { label: 'View', run: () => go('downloads') });
+    if (!quiet) toast(`Downloading ${label || meta.name}`, 'success', 5000, { label: 'View', run: () => go('downloads') });
   } catch (e) {
-    toast(String((e as Error)?.message ?? e), 'error', 6000);
+    if (!quiet) toast(String((e as Error)?.message ?? e), 'error', 6000);
   }
   void refreshDownloads();
 }

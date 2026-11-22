@@ -20,6 +20,9 @@
   import { startEpisodeChecks } from './lib/episodes.svelte';
   import { startMediaKeys } from './lib/mediakeys.svelte';
   import { startDownloads } from './lib/downloads.svelte';
+  import { startAutoDownloads } from './lib/autodl.svelte';
+  import { startStats } from './lib/stats.svelte';
+  import TrailerModal from './lib/components/TrailerModal.svelte';
   import type { Component } from 'svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -34,6 +37,7 @@
     live: () => import('./routes/Live.svelte'),
     calendar: () => import('./routes/Calendar.svelte'),
     downloads: () => import('./routes/Downloads.svelte'),
+    stats: () => import('./routes/Stats.svelte'),
     addons: () => import('./routes/Addons.svelte'),
     settings: () => import('./routes/Settings.svelte'),
     person: () => import('./routes/Person.svelte'),
@@ -75,6 +79,8 @@
   onMount(startEpisodeChecks);
   onMount(startMediaKeys);
   onMount(startDownloads);
+  onMount(startAutoDownloads);
+  onMount(startStats);
 
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);
@@ -127,6 +133,7 @@
 </div>
 <Studio />
 <Player />
+<TrailerModal />
 <Toasts />
 <ContextMenu />
 

@@ -11,6 +11,7 @@ import { recordPlay } from './stores/library.svelte';
 import { openPlayer, playback } from './stores/playback.svelte';
 import { settings } from './stores/settings.svelte';
 import { rememberShow, shows } from './stores/shows.svelte';
+import { downloadedCopy, playDownload } from './downloads.svelte';
 import { toast } from './stores/toast.svelte';
 
 export interface PlayInfo {
@@ -233,11 +234,22 @@ export function upNext(): Video | null {
 let picking = '';
 export async function playEpisode(v: Video): Promise<void> {
   const meta = playback.meta as MetaDetail | null;
-  if (!meta || picking) return;
+  if (!meta) return;
   if (playback.next?.video.id === v.id) return playNext();
+  return playVideo(meta, v);
+}
+
+/**
+ * One-click play of an episode or movie from anywhere (Up Next, Downloads…): a finished
+ * download if there is one, otherwise the best source, preferring the addon you used last.
+ */
+export async function playVideo(meta: MetaDetail, v: Video): Promise<void> {
+  if (picking) return;
+  const local = downloadedCopy(v.id);
+  if (local) return playDownload(local, meta);
   picking = v.id;
   try {
-    const s = await pickStream(meta, v.id, playback.stream);
+    const s = await pickStream(meta, v.id, playback.meta?.id === meta.id ? playback.stream : null);
     if (!s) {
       toast(`Couldn't find a source for ${epCode(v) || 'that episode'}. Pick one from its page.`, 'error', 7000);
       return;

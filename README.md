@@ -31,6 +31,11 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Binge mode.** A "Next episode" card near the credits with a countdown, using the same release (bingeGroup), addon and quality you were watching. Skip intro / recap buttons from the file's chapters and AniSkip (anime), or auto-skip.
 - **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
 - **Player extras**: chapter marks on the seek bar, Fit / Fill / Stretch picture (remembered), audio sync, screenshots to Pictures › Ripple, and a "stats for nerds" panel (resolution, HDR, codecs, bitrate, buffer, dropped frames).
+- **Up next** on Home: the next unwatched episode of every show you follow, one click to play. **Because you watched…** rows recommend from what you actually finished (TMDB key).
+- **Trailers** play in-app (Trailer button on title pages), and the Home banner can play them muted (Customize → Home).
+- **More ratings**: IMDb, Rotten Tomatoes, Metacritic and TMDB on title pages (Rotten Tomatoes/Metacritic need a free OMDb key in Settings → Integrations).
+- **Keep next episodes downloaded**: quietly downloads the next 1–3 episodes of shows you're watching.
+- **Your stats**: watch time, top shows and movies, favorite genres, streaks, biggest binge and when you watch, by month, year or all time.
 - **Downloads**: save episodes and movies (direct, debrid or torrent) to watch offline. Resumable, with a Downloads page, "On this PC" at the top of the source list, a folder setting, and optional delete-after-watching.
 - **Switches sources by itself**: if a source fails or stalls, Ripple tries the next best one (same release and quality first) and carries on from the same second.
 - **Seek bar previews**: hover the seek bar to see that moment of the video.

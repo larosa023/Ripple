@@ -375,7 +375,13 @@
           </select>
         </div>
         <label class="slider"><span>Rotate</span><input type="range" min="0" max="20" step="1" bind:value={look.heroInterval} /><b>{look.heroInterval ? look.heroInterval + 's' : 'Off'}</b></label>
+        <div class="toggle"><span>Play trailers (muted)</span><Switch bind:checked={settings.heroTrailers} label="Play trailers in the banner" /></div>
       {/if}
+
+      <h3>Rows for you</h3>
+      <div class="toggle"><span>Up next</span><Switch bind:checked={settings.showUpNext} label="Show Up next row" /></div>
+      <div class="toggle"><span>Because you watched…</span><Switch bind:checked={settings.showForYou} label="Show Because you watched rows" /></div>
+      {#if settings.showForYou && !settings.tmdbKey.trim()}<p class="faint small">Needs a TMDB key (Settings → Integrations).</p>{/if}
 
       <h3>Continue watching</h3>
       <div class="toggle"><span>Show row</span><Switch bind:checked={settings.showContinueWatching} label="Show row" /></div>

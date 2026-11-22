@@ -88,15 +88,19 @@ export async function imdbOf(kind: 'movie' | 'tv', id: number): Promise<string |
 export interface TitleExtras {
   recommended: MetaPreview[];
   collection: { name: string; items: MetaPreview[] } | null;
+  /** TMDB user score, 0–100 (null when too few votes to mean much). */
+  score: number | null;
 }
 
 /** "More like this" and, for movies in a franchise, the whole collection in release order. */
 export async function titleExtras(meta: MetaDetail): Promise<TitleExtras> {
   const id = await tmdbIdOf(meta);
-  if (!id) return { recommended: [], collection: null };
+  if (!id) return { recommended: [], collection: null, score: null };
   const kind = meta.type === 'series' ? 'tv' : 'movie';
   const r = await call<{
     belongs_to_collection?: { id: number; name: string } | null;
+    vote_average?: number;
+    vote_count?: number;
     recommendations?: { results?: TItem[] };
     similar?: { results?: TItem[] };
   }>(`/${kind}/${id}?append_to_response=recommendations,similar`);
@@ -120,7 +124,8 @@ export async function titleExtras(meta: MetaDetail): Promise<TitleExtras> {
       /* collection is a bonus */
     }
   }
-  return { recommended, collection };
+  const score = (r.vote_count ?? 0) >= 25 && r.vote_average ? Math.round(r.vote_average * 10) : null;
+  return { recommended, collection, score };
 }
 
 export interface PersonPage {
