@@ -31,6 +31,14 @@ pub fn run() {
             if let Ok(dir) = app.path().app_cache_dir() {
                 torrent::init(dir);
             }
+            // The window is transparent so mpv's video can show through the page, but the
+            // page itself only needs to be see-through while a video plays. Until then (and
+            // during resizes, before the page has painted) WebView2 fills with a solid color,
+            // so the desktop never shows through. The page switches this as playback starts
+            // and stops, and keeps it in step with the theme.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_background_color(Some(tauri::window::Color(11, 13, 18, 255)));
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

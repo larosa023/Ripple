@@ -2,6 +2,7 @@
 // saved, shared as a .ripplestyle file, and applied in one step.
 
 import { load, save } from '../stores/persist';
+import { setBackdropColor } from '../backdrop';
 import { FONTS, fontById, PRESETS, presetById, type Palette } from './presets';
 
 export type NavLayout = 'sidebar' | 'rail' | 'icons' | 'top' | 'dock';
@@ -300,6 +301,7 @@ export function applyLook(l: Look) {
   const s = root.style;
   const c = l.colors;
   s.setProperty('--bg', c.bg);
+  setBackdropColor(c.bg);
   s.setProperty('--bg-2', c.surface);
   s.setProperty('--bg-3', c.surface2);
   s.setProperty('--line', c.line);

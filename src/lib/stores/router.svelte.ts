@@ -69,7 +69,11 @@ function restore(key: string) {
         if (rows[i] && x && rows[i].scrollLeft !== x) rows[i].scrollLeft = x;
       });
       el.scrollTop = pos.y;
-      const done = Math.abs(el.scrollTop - pos.y) < 2 && rows.length >= pos.rows.length;
+      // Done once the page and every row that was scrolled sideways are back where they were.
+      const done =
+        Math.abs(el.scrollTop - pos.y) < 2 &&
+        rows.length >= pos.rows.length &&
+        pos.rows.every((x, i) => !x || Math.abs(rows[i].scrollLeft - x) < 2);
       if (done) return;
     }
     if (performance.now() < until) requestAnimationFrame(step);

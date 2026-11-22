@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getCatalog } from '../stremio/client';
+  import { getCatalog, hasCatalog } from '../stremio/client';
   import type { CatalogDef, InstalledAddon, MetaPreview } from '../stremio/types';
   import type { RowDisplay } from '../stores/settings.svelte';
   import { settings } from '../stores/settings.svelte';
@@ -41,7 +41,13 @@
   }
 
   // Only fetch when the row scrolls near the viewport: a dozen rows cost nothing until seen.
+  // Rows already in memory (coming Back to a page) fill in at once, so rows above where you
+  // were are there too: nothing pops in and shifts the page when you scroll up.
   $effect(() => {
+    if (status === 'idle' && hasCatalog(addon, catalog.type, catalog.id, extra)) {
+      load();
+      return;
+    }
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && status === 'idle') {
@@ -87,6 +93,8 @@
 </section>
 
 <style>
+  /* Rows far off screen skip layout and paint until you scroll near them; their last real
+     size is remembered so the page doesn't jump. */
   .row { margin-bottom: var(--row-gap); min-height: 40px; }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .title {

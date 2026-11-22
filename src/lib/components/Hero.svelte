@@ -14,6 +14,22 @@
   let slides: MetaPreview[] = $state([]);
   let index = $state(0);
   let paused = $state(false);
+  // Also hold the slideshow while it's scrolled out of view or the window is hidden, so it
+  // never cross-fades (repainting the whole width) while you scroll the rows below.
+  let offscreen = $state(false);
+  let hidden = $state(typeof document !== 'undefined' && document.hidden);
+  let el: HTMLElement | undefined = $state();
+  $effect(() => {
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => (offscreen = !e.isIntersecting), { threshold: 0.05 });
+    io.observe(el);
+    return () => io.disconnect();
+  });
+  $effect(() => {
+    const on = () => (hidden = document.hidden);
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  });
   let logoFailed: Record<string, boolean> = $state({});
 
   $effect(() => {
@@ -33,30 +49,65 @@
   });
 
   $effect(() => {
-    if (!look.heroInterval || paused || slides.length < 2) return;
-    const t = setInterval(() => (index = (index + 1) % slides.length), look.heroInterval * 1000);
+    if (!look.heroInterval || paused || offscreen || hidden || slides.length < 2) return;
+    const t = setInterval(() => void advance(), look.heroInterval * 1000);
     return () => clearInterval(t);
   });
 
+  // The next picture is fetched and decoded before the cross-fade starts, so the fade never
+  // stalls on a half-loaded image.
+  const ready = new Set<string>();
+  function decode(url: string | undefined) {
+    if (!url || ready.has(url)) return Promise.resolve();
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+    return img.decode().then(
+      () => void ready.add(url),
+      () => void ready.add(url), // broken image: don't hold the slideshow up over it
+    );
+  }
+  async function advance() {
+    const want = (index + 1) % slides.length;
+    await decode(backdropOf(slides[want], 'large'));
+    if (want === (index + 1) % slides.length) index = want;
+  }
+  /** Only the current slide and the one fading out are drawn, not every slide at once. */
+  let prev = $state(-1);
+  let last = 0;
+  $effect.pre(() => {
+    const i = index;
+    if (i !== last) {
+      prev = last;
+      last = i;
+    }
+  });
+  const drawn = (i: number) => i === index || i === prev;
+
   const cur = $derived(slides[index]);
-  // Preload the next backdrop so the crossfade never flashes.
+  // Warm up the next backdrop a little ahead of time.
   $effect(() => {
     const next = slides[(index + 1) % Math.max(slides.length, 1)];
-    if (next) new Image().src = backdropOf(next, 'large') ?? '';
+    if (next) void decode(backdropOf(next, 'large'));
   });
 </script>
 
 {#if slides.length}
   <section
+    bind:this={el}
     class="hero {look.hero}"
     onmouseenter={() => (paused = true)}
     onmouseleave={() => (paused = false)}
     aria-label="Featured"
     aria-roledescription="carousel"
   >
-    {#each slides as s, i (s.id)}
-      <div class="bg" class:on={i === index} style:background-image={`url("${backdropOf(s, 'large')}")`}></div>
-    {/each}
+    <div class="bgs">
+      {#each slides as s, i (s.id)}
+        {#if drawn(i)}
+          <div class="bg" class:on={i === index} style:background-image={`url("${backdropOf(s, 'large')}")`}></div>
+        {/if}
+      {/each}
+    </div>
     <div class="shade"></div>
 
     {#if cur}
@@ -102,11 +153,16 @@
     height: min(64vh, 600px); min-height: 360px;
   }
   .hero.compact { height: 300px; min-height: 0; margin: 0 0 var(--row-gap); border-radius: calc(var(--radius) * 1.6); }
+  /* The incoming slide sits underneath at full strength and slowly settles from a slight zoom;
+     the outgoing one stays on top and fades away, so only two layers ever exist. */
+  .bgs { position: absolute; inset: 0; isolation: isolate; overflow: hidden; }
   .bg {
     position: absolute; inset: 0; background-size: cover; background-position: center 20%;
-    opacity: 0; transform: scale(1.04); transition: opacity 900ms ease, transform 8s ease-out;
+    z-index: 1; opacity: 0; transition: opacity 900ms ease;
   }
-  .bg.on { opacity: 1; transform: scale(1); }
+  .bg.on { z-index: 0; opacity: 1; animation: settle 8s ease-out both; transition: none; }
+  @keyframes settle { from { transform: scale(1.04); } }
+  :global(:root[data-motion='reduce']) .bg.on { animation: none; }
   .shade {
     position: absolute; inset: 0;
     background:

@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
     <title>Ripple</title>
+    <!-- Painted before any script or stylesheet loads, so the (transparent) window is never see-through on launch. -->
+    <style>html, body { background: var(--bg, #0b0d12); margin: 0; }</style>
+    <script>
+      // Use the saved theme's background from the very first frame (light themes too).
+      try {
+        var bg = JSON.parse(localStorage.getItem('ripple:look') || '{}').colors.bg;
+        if (/^#[0-9a-f]{3,8}$/i.test(bg)) document.documentElement.style.setProperty('--bg', bg);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

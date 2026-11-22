@@ -176,6 +176,16 @@ export function getCatalog(
   );
 }
 
+/** True when this catalog is already in memory, so showing it costs nothing (no request). */
+export function hasCatalog(
+  addon: InstalledAddon,
+  type: string,
+  id: string,
+  extra?: Record<string, string | number | undefined>,
+): boolean {
+  return cache.has(resourceUrl(addon, 'catalog', type, id, extra));
+}
+
 /** Addons sometimes repeat items; lists are keyed by id, so drop repeats where data comes in. */
 export function uniqueBy<T>(list: T[], key: (x: T) => string): T[] {
   const seen = new Set<string>();

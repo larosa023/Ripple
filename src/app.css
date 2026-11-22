@@ -106,6 +106,10 @@ input[type='checkbox']:checked::after { transform: rotate(-45deg) translate(1px,
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .page { height: 100%; overflow-y: auto; padding: 28px var(--page-pad) 60px; }
+/* Pages fade in when you switch, instead of popping. Opacity only: a transform here would
+   break anything position: fixed inside the page. */
+.view > * { animation: page-in calc(var(--dur) * 1.4) ease-out both; }
+@keyframes page-in { from { opacity: 0; } }
 :root[data-nav='dock'] .page { padding-bottom: 110px; }
 :root[data-nav='dock'] { --dock-space: 92px; }
 .page-title { font-size: 26px; font-weight: 700; margin: 0 0 20px; letter-spacing: -0.02em; }

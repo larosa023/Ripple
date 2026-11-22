@@ -1,6 +1,7 @@
 // State and controls for the built-in player (mpv embedded in Ripple's window).
 import { invoke, stopTorrents, type Prepared } from '../player';
 import { isTauri } from '../stremio/http';
+import { setBackdropClear } from '../backdrop';
 import { baseLang, langName, sameLang } from '../lang';
 import type { MetaDetail, SourcedStream, Video } from '../stremio/types';
 import { fromAniSkip, fromChapters, mergeSegments, type Chapter, type Segment } from '../skip';
@@ -245,6 +246,9 @@ export async function openPlayer(
     stream: info.stream ?? null,
     live: info.live ?? null,
   });
+  // The page goes see-through so mpv's picture shows; the player's black cover hides
+  // everything until the first frame arrives.
+  setBackdropClear(true);
   document.documentElement.classList.add('playing');
   try {
     await subscribe(token);
@@ -310,12 +314,15 @@ function teardown(keepTorrent?: string) {
 export async function closePlayer(stopMpv = true, keepTorrent?: string) {
   startToken++;
   teardown(keepTorrent);
+  // Bring the app back first, then stop mpv. The other way round leaves a moment where
+  // neither the page nor the video covers the (transparent) window and the desktop shows.
+  const leaveFs = playback.fullscreen && playerFullscreen;
+  Object.assign(playback, blank(), { fullscreen: playback.fullscreen });
+  document.documentElement.classList.remove('playing', 'mini');
+  setBackdropClear(false);
   if (stopMpv && isTauri) await invoke('player_stop').catch(() => {});
   // Leave fullscreen only if the player turned it on; fullscreen chosen on a page stays.
-  if (playback.fullscreen && playerFullscreen) await setFullscreen(false);
-  const keepFs = playback.fullscreen;
-  Object.assign(playback, blank(), { fullscreen: keepFs });
-  document.documentElement.classList.remove('playing', 'mini');
+  if (leaveFs) await setFullscreen(false);
 }
 
 // ---------- skip markers ----------
