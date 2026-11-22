@@ -9,7 +9,9 @@
   import { backdropOf } from '../stremio/images';
   import { clockTime, settings } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
-  import { prefetchNext, playNext } from '../watch';
+  import { epCode, prefetchNext, playNext, skipToNext, upNext } from '../watch';
+  import PlayerEpisodes from './PlayerEpisodes.svelte';
+  import type { Video } from '../stremio/types';
   import { goLive, neighbour, playChannel, zap, zapChannels } from '../iptv/play.svelte';
   import { nowNext, tv } from '../iptv/live.svelte';
   import { SKIP_LABEL, type Segment } from '../skip';
@@ -46,7 +48,7 @@
 
   let showUi = $state(true);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let menu: '' | 'tracks' | 'speed' | 'channels' | 'more' = $state('');
+  let menu: '' | 'tracks' | 'speed' | 'channels' | 'more' | 'episodes' = $state('');
   let stats = $state(false);
   let hoverX = $state<number | null>(null);
   let scrubbing = $state(false);
@@ -101,6 +103,38 @@
 
   // ---------- next episode ----------
   const episodic = $derived(!!playback.meta && playback.meta.type !== 'movie');
+  const curVideo = $derived(((playback.meta?.videos ?? []) as Video[]).find((v) => v.id === playback.videoId) ?? null);
+  const nextVid = $derived(episodic && !playback.live ? upNext() : null);
+  const hasEpisodes = $derived(episodic && !playback.live && (playback.meta?.videos?.length ?? 0) > 1);
+  const epNum = (v: Video) => v.episode ?? v.number;
+
+  // ---------- pause screen ----------
+  // A beat after pausing, the picture dims and a panel says what this is: no flicker on a quick pause.
+  let pauseCard = $state(false);
+  $effect(() => {
+    const want = playback.paused && playback.ready && !playback.ended && !playback.error && !live && !playback.mini;
+    if (!want) {
+      pauseCard = false;
+      return;
+    }
+    const t = setTimeout(() => (pauseCard = true), 700);
+    return () => clearTimeout(t);
+  });
+  let logoBroken = $state(false);
+  $effect(() => {
+    void playback.meta?.logo;
+    logoBroken = false;
+  });
+  const left = $derived.by(() => {
+    const m = Math.max(0, Math.round((playback.duration - playback.time) / 60));
+    return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m left` : `${m}m left`;
+  });
+  const facts = $derived.by(() => {
+    const m = playback.meta;
+    if (!m) return [] as string[];
+    const year = curVideo?.released ? String(new Date(curVideo.released).getFullYear()) : String(m.year ?? m.releaseInfo ?? '');
+    return [year, ...(m.genres ?? []).slice(0, 3), m.runtime ?? ''].filter((x) => x && x !== 'NaN');
+  });
   /** When the next-episode card appears: at the credits if known, else 35s before the end. */
   const nextAt = $derived.by(() => {
     const d = playback.duration;
@@ -487,6 +521,10 @@
     } else if (k === 'p' || k === 'P') {
       handled();
       void snap();
+    } else if ((k === 'e' || k === 'E') && hasEpisodes) {
+      handled();
+      menu = menu === 'episodes' ? '' : 'episodes';
+      poke();
     } else if (k === 'i' || k === 'I') {
       handled();
       stats = !stats;
@@ -594,7 +632,7 @@
             ['↑ / ↓' + (settings.wheelAction === 'volume' ? ' or scroll' : ''), 'Volume'], ...(settings.wheelAction === 'seek' ? [['Scroll', `Back / forward ${settings.arrowStep}s`]] : []),
             ['M', 'Mute'], ['F' + (settings.dblClick === 'fullscreen' ? ' or double-click' : ''), 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
             ['Shift + Z / X', 'Audio earlier / later'], ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'],
-            ['Shift + N', 'Next episode'], ['A', 'Fit / fill / stretch'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
+            ['Shift + N', 'Next episode'], ['E', 'Episodes'], ['A', 'Fit / fill / stretch'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
           ] as [k, d] (k)}
             <dt>{k}</dt><dd>{d}</dd>
@@ -607,7 +645,9 @@
       <button class="ctl" onclick={() => closePlayer()} aria-label="Back" title="Back (Esc)"><Icon name="back" size={22} /></button>
       <div class="ttl" data-tauri-drag-region>
         <div class="name">{playback.title}</div>
-        {#if playback.subtitle}<div class="ep">{playback.subtitle}</div>{/if}
+        {#if curVideo && curVideo.season != null && epNum(curVideo) != null}
+          <div class="ep"><span class="sechip">S{curVideo.season} · E{epNum(curVideo)}</span>{curVideo.title || curVideo.name || ''}</div>
+        {:else if playback.subtitle}<div class="ep">{playback.subtitle}</div>{/if}
       </div>
       {#if settings.miniPlayer}<button class="ctl" onclick={() => setMini(true)} title="Mini player (keep watching while you browse)"><Icon name="pip" size={20} /></button>{/if}
       <button class="ctl" onclick={openExternally} title="Open in external player"><Icon name="external" size={19} /></button>
@@ -715,6 +755,46 @@
       </div>
     {/if}
 
+    {#if pauseCard && !menu && !scrubbing && !help && playback.meta}
+      {@const m = playback.meta}
+      {@const about = curVideo?.overview || curVideo?.description || m.description || ''}
+      <div class="pausecard" aria-live="polite">
+        <div class="pc-body">
+          <div class="pc-eyebrow"><span class="pc-pill"><Icon name="pause" size={10} fill />Paused</span>{episodic ? "You're watching" : ''}</div>
+          {#if m.logo && !logoBroken}
+            <img class="pc-logo" src={m.logo} alt={m.name} onerror={() => (logoBroken = true)} />
+          {:else}
+            <h1 class="pc-title">{m.name}</h1>
+          {/if}
+          {#if curVideo && episodic}
+            <div class="pc-ep">
+              {#if curVideo.season != null && epNum(curVideo) != null}<span>Season {curVideo.season} · Episode {epNum(curVideo)}</span>{/if}
+              {#if curVideo.title || curVideo.name}<b>{curVideo.title || curVideo.name}</b>{/if}
+            </div>
+          {/if}
+          <div class="pc-facts">
+            {#if m.imdbRating}<span class="pc-rate"><Icon name="star" size={13} fill />{m.imdbRating}</span>{/if}
+            {#each facts as f (f)}<span>{f}</span>{/each}
+          </div>
+          {#if about}<p class="pc-about">{about}</p>{/if}
+          <div class="pc-time">
+            <div class="pc-bar"><i style:width="{progress}%"></i></div>
+            <span><b>{left}</b>{#if endsAt}&nbsp;· Ends at {endsAt}{/if}</span>
+          </div>
+        </div>
+        {#if nextVid}
+          <button class="pc-next" onclick={() => skipToNext()}>
+            <span class="pc-nthumb" style:background-image={nextVid.thumbnail || backdropOf(m, 'small') ? `url("${nextVid.thumbnail || backdropOf(m, 'small')}")` : undefined}><Icon name="play" size={18} fill /></span>
+            <span class="pc-ntxt"><em>Up next</em><b>{epCode(nextVid)}</b><small>{nextVid.title || nextVid.name || ''}</small></span>
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if menu === 'episodes'}
+      <PlayerEpisodes onclose={() => (menu = '')} />
+    {/if}
+
     {#if stats}
       <div class="stats" role="dialog" aria-label="Stats for nerds">
         <div class="sh">Stats for nerds <button class="ctl s" onclick={() => (stats = false)} aria-label="Close"><Icon name="x" size={14} /></button></div>
@@ -767,6 +847,19 @@
         {:else}
           <button class="ctl skipn" onclick={() => seekBy(-settings.seekStep)} title="Back {settings.seekStep}s (J)"><Icon name="replay" size={22} /><span>{settings.seekStep}</span></button>
           <button class="ctl skipn" onclick={() => seekBy(settings.seekStep)} title="Forward {settings.seekStep}s (L)"><Icon name="forward" size={22} /><span>{settings.seekStep}</span></button>
+          {#if nextVid}
+            <div class="nextwrap">
+              <button class="ctl" onclick={() => skipToNext()} aria-label="Next episode (Shift+N)"><Icon name="next" size={20} fill /></button>
+              <div class="nexttip" aria-hidden="true">
+                <span class="nt-thumb" style:background-image={nextVid.thumbnail || (playback.meta && backdropOf(playback.meta, 'small')) ? `url("${nextVid.thumbnail || backdropOf(playback.meta!, 'small')}")` : undefined}></span>
+                <span class="nt-txt">
+                  <em>Next episode · Shift+N</em>
+                  <b>{epCode(nextVid)}{nextVid.title || nextVid.name ? ` · ${nextVid.title || nextVid.name}` : ''}</b>
+                  {#if nextVid.overview || nextVid.description}<small>{nextVid.overview || nextVid.description}</small>{/if}
+                </span>
+              </div>
+            </div>
+          {/if}
         {/if}
 
         <div class="vol">
@@ -795,6 +888,11 @@
 
         <div class="spacer"></div>
 
+        {#if hasEpisodes}
+          <button class="ctl eps-btn" class:on={menu === 'episodes'} onclick={() => toggleMenu('episodes')} title="Episodes (E)" aria-expanded={menu === 'episodes'}>
+            <Icon name="episodes" size={20} /><span>Episodes</span>
+          </button>
+        {/if}
         {#if live}
           <button class="ctl" class:on={menu === 'channels'} onclick={() => (menu = menu === 'channels' ? '' : 'channels')} title="Channels (G)"><Icon name="list" size={20} /></button>
         {:else}
@@ -965,7 +1063,7 @@
   .cover.gone { opacity: 0; visibility: hidden; transition: opacity 350ms ease, visibility 0s linear 350ms; }
   .art { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.28; transform: scale(1.05); }
 
-  .top, .bottom { position: absolute; left: 0; right: 0; transition: opacity 220ms ease, transform 220ms ease; }
+  .top, .bottom { position: absolute; left: 0; right: 0; z-index: 2; transition: opacity 220ms ease, transform 220ms ease; }
   .hide .top, .hide .bottom { opacity: 0; pointer-events: none; }
   .hide .top { transform: translateY(-8px); }
   .hide .bottom { transform: translateY(8px); }
@@ -976,7 +1074,73 @@
   }
   .ttl { flex: 1; min-width: 0; }
   .name { font-family: var(--font-display); font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px rgb(0 0 0 / 0.6); }
-  .ep { font-size: 13px; color: rgb(255 255 255 / 0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 13px; color: rgb(255 255 255 / 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px rgb(0 0 0 / 0.6); }
+  .sechip { flex-shrink: 0; padding: 1px 7px; border-radius: 6px; background: rgb(255 255 255 / 0.16); font: 700 11px var(--font); letter-spacing: 0.03em; color: #fff; text-shadow: none; backdrop-filter: blur(8px); }
+
+  /* ---------- pause screen ---------- */
+  .pausecard {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 0 clamp(24px, 5vw, 72px) 150px;
+    background:
+      linear-gradient(90deg, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0.55) 38%, rgb(0 0 0 / 0.1) 70%, transparent),
+      linear-gradient(0deg, rgb(0 0 0 / 0.6), transparent 45%);
+    animation: pc-in 420ms ease both;
+  }
+  @keyframes pc-in { from { opacity: 0; } }
+  .pc-body { max-width: min(620px, 52vw); display: flex; flex-direction: column; gap: 12px; animation: pc-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  @keyframes pc-rise { from { opacity: 0; transform: translateY(14px); } }
+  :global(:root[data-motion='reduce']) .pc-body { animation: none; }
+  .pc-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: rgb(255 255 255 / 0.7); }
+  .pc-pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+    background: var(--player-accent); color: var(--on-accent); font: 800 10.5px var(--font); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .pc-logo { max-width: min(420px, 40vw); max-height: 130px; object-fit: contain; object-position: left bottom; align-self: flex-start; filter: drop-shadow(0 4px 24px rgb(0 0 0 / 0.6)); }
+  .pc-title { margin: 0; font: 800 clamp(34px, 4.4vw, 58px) / 1.02 var(--font-display); letter-spacing: -0.02em; text-shadow: 0 4px 30px rgb(0 0 0 / 0.6); }
+  .pc-ep { display: flex; flex-direction: column; gap: 2px; }
+  .pc-ep span { font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--player-accent); }
+  .pc-ep b { font: 700 clamp(20px, 2vw, 26px) var(--font-display); letter-spacing: -0.01em; }
+  .pc-facts { display: flex; flex-wrap: wrap; align-items: center; row-gap: 6px; font-size: 13.5px; color: rgb(255 255 255 / 0.75); }
+  .pc-facts span + span::before { content: '•'; margin: 0 9px; color: rgb(255 255 255 / 0.35); }
+  .pc-rate { display: inline-flex; align-items: center; gap: 5px; margin-right: 14px; font-weight: 700; color: #f5c518; }
+  .pc-rate + span::before { content: none !important; }
+  .pc-about { margin: 0; font-size: 14.5px; line-height: 1.55; color: rgb(255 255 255 / 0.82); display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .pc-time { display: flex; align-items: center; gap: 12px; margin-top: 4px; font-size: 13px; color: rgb(255 255 255 / 0.7); }
+  .pc-time b { color: #fff; font-weight: 600; }
+  .pc-bar { width: 140px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.2); overflow: hidden; }
+  .pc-bar i { display: block; height: 100%; background: var(--player-accent); }
+  .pc-next {
+    pointer-events: auto; flex-shrink: 0; display: flex; align-items: center; gap: 12px; width: 330px; padding: 8px; border-radius: 14px;
+    border: 1px solid rgb(255 255 255 / 0.12); background: rgb(20 21 27 / 0.6); color: #fff; text-align: left; cursor: pointer;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: pc-rise 620ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transition: background var(--dur), border-color var(--dur), transform var(--dur);
+  }
+  .pc-next:hover { background: rgb(30 31 38 / 0.8); border-color: rgb(255 255 255 / 0.25); transform: translateY(-2px); }
+  .pc-nthumb { position: relative; flex-shrink: 0; width: 120px; aspect-ratio: 16 / 9; border-radius: 8px; display: grid; place-items: center; background: rgb(255 255 255 / 0.08) center / cover; }
+  .pc-nthumb :global(svg) { filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.8)); opacity: 0.9; }
+  .pc-ntxt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .pc-ntxt em { font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--player-accent); }
+  .pc-ntxt b { font-size: 14px; }
+  .pc-ntxt small { font-size: 12.5px; color: rgb(255 255 255 / 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 900px) { .pc-next { display: none; } .pc-body { max-width: 80vw; } }
+
+  /* Next-episode button preview */
+  .nextwrap { position: relative; }
+  .nexttip {
+    position: absolute; left: 50%; bottom: 54px; z-index: 4; width: 300px; display: flex; flex-direction: column; overflow: hidden;
+    border-radius: 14px; background: rgb(16 17 22 / 0.9); border: 1px solid rgb(255 255 255 / 0.1); box-shadow: 0 20px 50px rgb(0 0 0 / 0.5);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    opacity: 0; transform: translate(-50%, 6px); pointer-events: none; transition: opacity var(--dur), transform var(--dur);
+  }
+  .nextwrap:hover .nexttip { opacity: 1; transform: translate(-50%, 0); transition-delay: 150ms; }
+  .nt-thumb { aspect-ratio: 16 / 9; background: rgb(255 255 255 / 0.06) center / cover; }
+  .nt-txt { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 12px; }
+  .nt-txt em { font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgb(255 255 255 / 0.55); }
+  .nt-txt b { font-size: 14px; }
+  .nt-txt small { font-size: 12px; line-height: 1.4; color: rgb(255 255 255 / 0.65); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .eps-btn { display: flex !important; align-items: center; width: auto !important; padding: 0 12px 0 10px !important; gap: 7px; border-radius: 999px !important; font: 600 13px var(--font); }
+  .eps-btn span { white-space: nowrap; }
+  @media (max-width: 820px) { .eps-btn span { display: none; } .eps-btn { padding: 0 !important; width: 40px !important; } }
   .wc { align-self: flex-start; height: 32px; margin-top: -10px; --text: #fff; --text-2: rgb(255 255 255 / 0.8); }
   .top > .ctl:last-of-type { margin-right: 12px; }
 

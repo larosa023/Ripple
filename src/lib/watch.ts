@@ -158,6 +158,40 @@ export async function playNext() {
   }
 }
 
+/** The episode after the one playing, looked up on the spot (null for the last one or a movie). */
+export function upNext(): Video | null {
+  const meta = playback.meta as MetaDetail | null;
+  if (!meta || !isEpisodic(meta)) return null;
+  return playback.next?.video ?? nextVideo(meta, playback.videoId);
+}
+
+/** Plays any episode of the show that's playing, picking a source like "next episode" does. */
+let picking = '';
+export async function playEpisode(v: Video): Promise<void> {
+  const meta = playback.meta as MetaDetail | null;
+  if (!meta || picking) return;
+  if (playback.next?.video.id === v.id) return playNext();
+  picking = v.id;
+  try {
+    const s = await pickStream(meta, v.id, playback.stream);
+    if (!s) {
+      toast(`Couldn't find a source for ${epCode(v) || 'that episode'}. Pick one from its page.`, 'error', 7000);
+      return;
+    }
+    await playStream(s, { meta, videoId: v.id, label: epLabel(v) });
+  } catch (e) {
+    toast((e as Error)?.message ?? String(e), 'error', 6000);
+  } finally {
+    picking = '';
+  }
+}
+
+/** Skips to the next episode now, finding its source if that hasn't happened yet. */
+export function skipToNext() {
+  if (!playback.next) prefetchNext();
+  return playNext();
+}
+
 async function startNext(meta: MetaDetail, next: NonNullable<typeof playback.next>) {
   let s = next.stream;
   if (!s && next.status === 'finding') s = await pickStream(meta, next.video.id, playback.stream);
