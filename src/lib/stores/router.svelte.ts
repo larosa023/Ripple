@@ -1,6 +1,6 @@
 // Tiny hash router: #/home, #/discover, #/search?q=, #/detail/movie/tt123, ...
 
-export type RouteName = 'home' | 'discover' | 'search' | 'detail' | 'library' | 'live' | 'calendar' | 'addons' | 'settings' | 'person';
+export type RouteName = 'home' | 'discover' | 'search' | 'detail' | 'library' | 'live' | 'calendar' | 'downloads' | 'addons' | 'settings' | 'person';
 
 export interface Route {
   name: RouteName;
@@ -8,7 +8,7 @@ export interface Route {
   query: URLSearchParams;
 }
 
-const NAMES: RouteName[] = ['home', 'discover', 'search', 'detail', 'library', 'live', 'calendar', 'addons', 'settings', 'person'];
+const NAMES: RouteName[] = ['home', 'discover', 'search', 'detail', 'library', 'live', 'calendar', 'downloads', 'addons', 'settings', 'person'];
 
 function parse(hash: string): Route {
   const [path, qs = ''] = hash.replace(/^#\/?/, '').split('?');

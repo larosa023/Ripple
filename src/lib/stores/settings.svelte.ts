@@ -68,6 +68,14 @@ export interface Settings {
   wheelAction: 'volume' | 'seek' | 'off';
   /** What double-clicking the video does. */
   dblClick: 'fullscreen' | 'seek' | 'off';
+  /** Try another source automatically when one fails or stalls. */
+  autoSwitch: boolean;
+  /** Show a frame preview when hovering the seek bar. */
+  seekPreviews: boolean;
+  /** Where downloads go ('' = Videos\\Ripple). */
+  downloadDir: string;
+  /** Delete a download once you've finished watching it. */
+  downloadAutoDelete: boolean;
   /** "Ends at 10:42 PM" next to the player clock. */
   showEndsAt: boolean;
   /** 12 or 24 hour times across the app. */
@@ -136,6 +144,10 @@ export const DEFAULT_SETTINGS: Settings = {
   wheelAction: 'volume',
   dblClick: 'fullscreen',
   showEndsAt: true,
+  autoSwitch: true,
+  seekPreviews: true,
+  downloadDir: '',
+  downloadAutoDelete: false,
   clock: 'auto',
   subFont: '',
   subScale: 1,

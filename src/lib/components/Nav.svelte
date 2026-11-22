@@ -6,6 +6,7 @@
     library: { label: 'Library', icon: 'library' },
     live: { label: 'Live TV', icon: 'tv' },
     calendar: { label: 'Calendar', icon: 'calendar' },
+    downloads: { label: 'Downloads', icon: 'download' },
     addons: { label: 'Addons', icon: 'puzzle' },
   };
 </script>
@@ -17,6 +18,7 @@
   import { settings } from '../stores/settings.svelte';
   import { href, router, type RouteName } from '../stores/router.svelte';
   import { newCount } from '../episodes.svelte';
+  import { activeDownloads } from '../downloads.svelte';
   import { look } from '../theme/look.svelte';
   import { openStudio, ui } from '../stores/ui.svelte';
 
@@ -44,6 +46,7 @@
       <a class="item" class:active={active(item.id)} href={href(item.id)} title={m.label}>
         <Icon name={m.icon} size={iconSize} stroke={iconStroke} />
         {#if labels}<span>{m.label}</span>{/if}
+        {#if item.id === 'downloads' && activeDownloads() > 0}<i class="count dl" aria-label="{activeDownloads()} downloading">{activeDownloads()}</i>{/if}
         {#if item.id === 'calendar' && newCount() > 0}<i class="count" aria-label="{newCount()} new episodes">{newCount() > 9 ? '9+' : newCount()}</i>{/if}
       </a>
     {/each}

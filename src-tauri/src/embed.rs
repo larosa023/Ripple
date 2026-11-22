@@ -71,7 +71,7 @@ fn connect() -> std::io::Result<Conn> {
     }
 }
 
-fn window_id<R: Runtime>(app: &AppHandle<R>) -> Result<i64, String> {
+pub(crate) fn window_id<R: Runtime>(app: &AppHandle<R>) -> Result<i64, String> {
     let win = app.get_webview_window("main").ok_or("Main window not found")?;
     let handle = win.window_handle().map_err(|e| e.to_string())?;
     match handle.as_raw() {
@@ -108,7 +108,7 @@ pub struct EmbedRequest {
 
 /// mpv options for request headers. User-Agent and Referer have their own options; ffmpeg would
 /// otherwise send its default user agent alongside ours, which some IPTV providers reject.
-fn header_args(headers: &[(String, String)]) -> Vec<String> {
+pub(crate) fn header_args(headers: &[(String, String)]) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = Vec::new();
     for (k, v) in headers {

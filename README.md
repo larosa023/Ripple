@@ -31,6 +31,11 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Binge mode.** A "Next episode" card near the credits with a countdown, using the same release (bingeGroup), addon and quality you were watching. Skip intro / recap buttons from the file's chapters and AniSkip (anime), or auto-skip.
 - **Remembers each show**: audio language, subtitle track and preferred source, so the next episode starts the way you like it.
 - **Player extras**: chapter marks on the seek bar, Fit / Fill / Stretch picture (remembered), audio sync, screenshots to Pictures › Ripple, and a "stats for nerds" panel (resolution, HDR, codecs, bitrate, buffer, dropped frames).
+- **Downloads**: save episodes and movies (direct, debrid or torrent) to watch offline. Resumable, with a Downloads page, "On this PC" at the top of the source list, a folder setting, and optional delete-after-watching.
+- **Switches sources by itself**: if a source fails or stalls, Ripple tries the next best one (same release and quality first) and carries on from the same second.
+- **Seek bar previews**: hover the seek bar to see that moment of the video.
+- **Windows media controls**: what's playing shows in the Windows media overlay, and keyboard play/pause/next keys work even when Ripple isn't focused.
+- **F11** toggles fullscreen anywhere.
 - **Pause screen**: a beat after you pause, the picture dims and shows the show's logo, season and episode, title, rating, year, genres, time left, "Ends at" and the episode's description, plus an Up next card.
 - **Next episode & Episodes panel**: a Next button (hover for a preview of the episode) and an Episodes panel (`E`) with seasons, thumbnails, your progress and watched marks; click any episode to play it.
 - **Player customization** (Customize → Player, also from the player's ⋯ menu, live over the video): player accent color, thin or thick seek bar, regular or large buttons, see-through or solid menus, skip-button and arrow-key amounts, scroll wheel (volume / seek / nothing), double-click (fullscreen / seek sides / nothing), how fast controls hide, and an "Ends at" time.

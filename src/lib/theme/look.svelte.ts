@@ -16,7 +16,7 @@ export type DetailLayout = 'cinematic' | 'classic';
 export type BgAnimation = 'none' | 'aurora' | 'bokeh';
 
 export interface NavItem {
-  id: 'home' | 'discover' | 'search' | 'library' | 'live' | 'calendar' | 'addons';
+  id: 'home' | 'discover' | 'search' | 'library' | 'live' | 'calendar' | 'downloads' | 'addons';
   visible: boolean;
 }
 
@@ -77,6 +77,7 @@ const NAV_DEFAULT: NavItem[] = [
   { id: 'library', visible: true },
   { id: 'live', visible: true },
   { id: 'calendar', visible: true },
+  { id: 'downloads', visible: true },
   { id: 'addons', visible: true },
 ];
 

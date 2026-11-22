@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from '../lib/components/Icon.svelte';
+  import { isTauri } from '../lib/stremio/http';
+  import { revealDownload } from '../lib/downloads.svelte';
   import SettingRow from '../lib/components/SettingRow.svelte';
   import Switch from '../lib/components/Switch.svelte';
   import { detectPlayers, errorText, installMpv, openExternal, type DetectedPlayer } from '../lib/player';
@@ -60,6 +62,12 @@
         : 'none',
   );
 
+  let dlDefault = $state('Videos\\Ripple');
+  $effect(() => {
+    if (isTauri)
+      void import('@tauri-apps/api/path').then(async (p) => (dlDefault = await p.join(await p.videoDir(), 'Ripple'))).catch(() => {});
+  });
+
   type Section = 'general' | 'playback' | 'streams' | 'integrations' | 'appearance' | 'data' | 'about';
   const SECTIONS: { id: Section; label: string; icon: string; blurb: string }[] = [
     { id: 'general', label: 'General', icon: 'settings', blurb: 'Startup and content filtering' },
@@ -67,7 +75,7 @@
     { id: 'streams', label: 'Streams', icon: 'filter', blurb: 'How stream lists are sorted and filtered' },
     { id: 'integrations', label: 'Integrations', icon: 'link', blurb: 'TMDB, Letterboxd, Series Graph and Discord' },
     { id: 'appearance', label: 'Appearance', icon: 'brush', blurb: 'Themes, layouts and the home screen' },
-    { id: 'data', label: 'Data & network', icon: 'download', blurb: 'Backups, cache and addon timeouts' },
+    { id: 'data', label: 'Data & downloads', icon: 'download', blurb: 'Downloads, backups, cache and addon timeouts' },
     { id: 'about', label: 'About & updates', icon: 'refresh', blurb: 'Version and updates' },
   ];
 
@@ -221,6 +229,12 @@
               </SettingRow>
               <SettingRow title="Resume where you left off" description="Pick up from your last position when you reopen something.">
                 <Switch bind:checked={settings.resume} label="Resume where you left off" />
+              </SettingRow>
+              <SettingRow title="Switch sources automatically" description="If a source fails or stalls, try the next best one (same release and quality first) and carry on from the same spot.">
+                <Switch bind:checked={settings.autoSwitch} label="Switch sources automatically" />
+              </SettingRow>
+              <SettingRow title="Seek bar previews" description="Show a picture of that moment when you hover over the seek bar.">
+                <Switch bind:checked={settings.seekPreviews} label="Seek bar previews" />
               </SettingRow>
             {/if}
           </div>
@@ -514,6 +528,18 @@
 
         {:else if section === 'data'}
           <div class="group">
+            <SettingRow title="Download folder" description="Where downloaded episodes and movies are saved. Leave empty for Videos › Ripple.">
+              <div class="dlrow">
+                <input class="input" placeholder={dlDefault} bind:value={settings.downloadDir} spellcheck="false" />
+                <button class="btn sm" onclick={() => revealDownload(null)}><Icon name="folder" size={14} />Open</button>
+              </div>
+            </SettingRow>
+            <SettingRow title="Delete after watching" description="Remove a download once you've finished watching it, to free up space.">
+              <Switch bind:checked={settings.downloadAutoDelete} label="Delete downloads after watching" />
+            </SettingRow>
+          </div>
+
+          <div class="group">
             <SettingRow title="Addon timeout" description="How long to wait for a slow addon before giving up.">
               <div class="num">
                 <input class="input" type="number" min="3" max="60" bind:value={settings.requestTimeoutSec} onchange={() => (settings.requestTimeoutSec = Math.min(60, Math.max(3, Math.round(Number(settings.requestTimeoutSec) || 12))))} />
@@ -617,6 +643,8 @@
   .input.short { width: 190px; }
   .mono { font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace; font-size: 13px; }
   .num { display: flex; align-items: center; gap: 8px; }
+  .dlrow { display: flex; gap: 8px; align-items: center; }
+  .dlrow .input { width: 280px; }
   .num .input { width: 80px; }
   .status-input { position: relative; display: flex; align-items: center; }
   .status-input .input { padding-left: 30px; }

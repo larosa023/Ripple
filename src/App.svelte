@@ -18,6 +18,8 @@
   import { applyLook, look } from './lib/theme/look.svelte';
   import { startDiscordSync } from './lib/discord.svelte';
   import { startEpisodeChecks } from './lib/episodes.svelte';
+  import { startMediaKeys } from './lib/mediakeys.svelte';
+  import { startDownloads } from './lib/downloads.svelte';
   import type { Component } from 'svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -31,6 +33,7 @@
   const later: Record<string, () => Promise<{ default: Component }>> = {
     live: () => import('./routes/Live.svelte'),
     calendar: () => import('./routes/Calendar.svelte'),
+    downloads: () => import('./routes/Downloads.svelte'),
     addons: () => import('./routes/Addons.svelte'),
     settings: () => import('./routes/Settings.svelte'),
     person: () => import('./routes/Person.svelte'),
@@ -70,6 +73,8 @@
 
   startDiscordSync();
   onMount(startEpisodeChecks);
+  onMount(startMediaKeys);
+  onMount(startDownloads);
 
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);
@@ -82,6 +87,12 @@
   });
 
   function onKey(e: KeyboardEvent) {
+    // F11: fullscreen anywhere, player included, like a browser.
+    if (e.key === 'F11') {
+      e.preventDefault();
+      void setFullscreen(!playback.fullscreen, playback.active && !playback.mini);
+      return;
+    }
     if (playback.active && !playback.mini) return; // the player handles its own keys
     // Esc leaves window fullscreen (entered from a title page) when nothing else wants Esc.
     if (e.key === 'Escape' && playback.fullscreen && !e.defaultPrevented) {
