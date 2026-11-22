@@ -95,7 +95,7 @@
     <section class="card results">
       <header><h2>Import results</h2><button class="icon-btn" onclick={() => (results = [])} aria-label="Close results"><Icon name="x" size={16} /></button></header>
       <ul>
-        {#each results as r (r.name)}
+        {#each results as r, i (i)}
           <li class:bad={!!r.error}>
             <Icon name={r.error ? 'x' : 'check'} size={14} stroke={2.6} />
             <span><b>{r.name}</b>
