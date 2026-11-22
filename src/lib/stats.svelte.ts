@@ -21,7 +21,13 @@ export interface WatchLog {
   /** Episodes / movies finished: video id, title id, when. */
   finished: { v: string; m: string; at: number }[];
   seeded: boolean;
+  /** Imported history lists already applied (so importing twice doesn't double count). */
+  imported?: string[];
 }
+
+/** Undated (imported) history lives under this day key: counted in All time only. */
+const UNDATED = 'earlier';
+const dated = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k);
 
 export const log: WatchLog = $state(load('watchlog', { days: {}, hours: Array(24).fill(0), titles: {}, finished: [], seeded: false }));
 
@@ -54,7 +60,7 @@ function seed() {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
-function persist() {
+export function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => save('watchlog', $state.snapshot(log)), 2000);
 }
@@ -164,12 +170,14 @@ export function summarize(period: Period, now = new Date()): Summary {
       const s = Object.entries(log.days).filter(([day]) => day.startsWith(prefix)).reduce((a, [, t]) => a + total(t), 0);
       return { label: MONTHS[d.getMonth()], full: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, seconds: s };
     });
+    // Imported history without dates, as one bar before the months.
+    if (log.days[UNDATED]) bars.unshift({ label: 'Earlier', full: 'Imported history (no dates)', seconds: total(log.days[UNDATED]) });
   }
 
-  const finishedIn = log.finished.filter((f) => inPeriod(dayKey(f.at), period, now));
+  const finishedIn = log.finished.filter((f) => (f.at ? inPeriod(dayKey(f.at), period, now) : period === 'all'));
 
   // Longest run of consecutive days with at least 5 minutes watched.
-  const watchedDays = days.filter(([, t]) => total(t) >= 300).map(([d]) => d).sort();
+  const watchedDays = days.filter(([d, t]) => dated(d) && total(t) >= 300).map(([d]) => d).sort();
   let streak = 0;
   let run = 0;
   let prev = 0;
@@ -182,6 +190,7 @@ export function summarize(period: Period, now = new Date()): Summary {
 
   let busiest: Summary['busiest'] = null;
   for (const [d, t] of days) {
+    if (!dated(d)) continue;
     const s = total(t);
     if (!busiest || s > busiest.seconds) busiest = { day: d, seconds: s };
   }
@@ -189,7 +198,7 @@ export function summarize(period: Period, now = new Date()): Summary {
   // Most episodes of one show finished in a single day.
   const per = new Map<string, number>();
   for (const f of finishedIn) {
-    if (log.titles[f.m]?.type !== 'series') continue;
+    if (!f.at || log.titles[f.m]?.type !== 'series') continue;
     const k = `${f.m}|${dayKey(f.at)}`;
     per.set(k, (per.get(k) ?? 0) + 1);
   }
@@ -210,7 +219,7 @@ export function summarize(period: Period, now = new Date()): Summary {
     streak,
     busiest,
     binge,
-    activeDays: days.filter(([, t]) => total(t) >= 60).length,
+    activeDays: days.filter(([d, t]) => dated(d) && total(t) >= 60).length,
   };
 }
 

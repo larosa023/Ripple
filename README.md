@@ -35,7 +35,7 @@ Ripple keeps Stremio's addon ecosystem intact (any addon that works in Stremio w
 - **Trailers** play in-app (Trailer button on title pages), and the Home banner can play them muted (Customize → Home).
 - **More ratings**: IMDb, Rotten Tomatoes, Metacritic and TMDB on title pages (Rotten Tomatoes/Metacritic need a free OMDb key in Settings → Integrations).
 - **Keep next episodes downloaded**: quietly downloads the next 1–3 episodes of shows you're watching.
-- **Your stats**: watch time, top shows and movies, favorite genres, streaks, biggest binge and when you watch, by month, year or all time.
+- **Your stats**: watch time, top shows and movies, favorite genres, streaks, biggest binge and when you watch, by month, year or all time. **Import history** adds past watching from a list (marks it watched and feeds Up next).
 - **Downloads**: save episodes and movies (direct, debrid or torrent) to watch offline. Resumable, with a Downloads page, "On this PC" at the top of the source list, a folder setting, and optional delete-after-watching.
 - **Switches sources by itself**: if a source fails or stalls, Ripple tries the next best one (same release and quality first) and carries on from the same second.
 - **Seek bar previews**: hover the seek bar to see that moment of the video.

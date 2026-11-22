@@ -3,6 +3,8 @@
   import { hm, log, summarize, type Period } from '../lib/stats.svelte';
   import { href } from '../lib/stores/router.svelte';
   import { clockTime } from '../lib/stores/settings.svelte';
+  import { importHistory, isImportFile, type ImportResult } from '../lib/historyimport';
+  import { toast } from '../lib/stores/toast.svelte';
 
   let period: Period = $state('year');
   const now = new Date();
@@ -42,17 +44,70 @@
     ['all', 'All time'],
   ];
   let tip: { x: number; text: string } | null = $state(null);
+
+  // ---------- import past watching ----------
+  let picker: HTMLInputElement | undefined = $state();
+  let importing = $state<{ done: number; total: number } | null>(null);
+  let results: ImportResult[] = $state([]);
+  async function onFile(e: Event) {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0];
+    (e.currentTarget as HTMLInputElement).value = '';
+    if (!f) return;
+    let data: unknown;
+    try {
+      data = JSON.parse(await f.text());
+    } catch {
+      toast("That file isn't a Ripple watch-history file.", 'error', 6000);
+      return;
+    }
+    if (!isImportFile(data)) {
+      toast("That file isn't a Ripple watch-history file.", 'error', 6000);
+      return;
+    }
+    importing = { done: 0, total: data.items.length };
+    try {
+      results = await importHistory(data, (done, total) => (importing = { done, total }));
+      const ok = results.filter((r) => r.matched).length;
+      toast(`Imported ${ok} of ${results.length} titles`, ok ? 'success' : 'error', 6000);
+      period = 'all';
+    } finally {
+      importing = null;
+    }
+  }
 </script>
 
 <div class="page">
+  <input bind:this={picker} type="file" accept=".json,application/json" hidden onchange={onFile} />
   <div class="head">
     <h1 class="page-title">Your stats</h1>
+    <span class="grow"></span>
+    <button class="btn ghost sm" disabled={!!importing} onclick={() => picker?.click()} title="Add past watching from a Ripple watch-history file">
+      {#if importing}<span class="spinner small-spin"></span>Importing {importing.done}/{importing.total}…{:else}<Icon name="upload" size={14} />Import history{/if}
+    </button>
     <div class="seg" role="tablist" aria-label="Period">
       {#each PERIODS as [v, l] (v)}
         <button role="tab" aria-selected={period === v} class:on={period === v} onclick={() => (period = v)}>{l}</button>
       {/each}
     </div>
   </div>
+
+  {#if results.length}
+    <section class="card results">
+      <header><h2>Import results</h2><button class="icon-btn" onclick={() => (results = [])} aria-label="Close results"><Icon name="x" size={16} /></button></header>
+      <ul>
+        {#each results as r (r.name)}
+          <li class:bad={!!r.error}>
+            <Icon name={r.error ? 'x' : 'check'} size={14} stroke={2.6} />
+            <span><b>{r.name}</b>
+              {#if r.matched}→ {r.matched} · {r.kind === 'movie' ? (r.episodes === 1 ? 'watched once' : `watched ${r.episodes} times`) : `${r.episodes} episode${r.episodes === 1 ? '' : 's'}`}
+              {:else if r.skipped}<em>already imported</em>
+              {:else}<em>{r.error}</em>{/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 
   {#if s.seconds < 60}
     <div class="empty">
@@ -65,7 +120,7 @@
       <div class="tile hero">
         <span class="k">Watch time</span>
         <b class="v">{hm(s.seconds)}</b>
-        <span class="sub">{s.activeDays} day{s.activeDays === 1 ? '' : 's'} with something on</span>
+        <span class="sub">{s.activeDays ? `${s.activeDays} day${s.activeDays === 1 ? '' : 's'} with something on` : 'from your imported history'}</span>
       </div>
       <div class="tile"><span class="k">Finished</span><b class="v">{s.finished}</b><span class="sub">episodes &amp; movies</span></div>
       <div class="tile"><span class="k">Titles</span><b class="v">{s.titles.length}</b><span class="sub">{#if shows.length}{@const n = s.titles.filter((t) => t.info.type === 'series').length}{n} show{n === 1 ? '' : 's'}{:else}watched{/if}</span></div>
@@ -164,7 +219,16 @@
 </div>
 
 <style>
-  .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  .results header { display: flex; align-items: center; justify-content: space-between; }
+  .results h2 { margin: 0 0 8px; }
+  .results ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 18px; font-size: 13.5px; }
+  .results li { display: flex; gap: 8px; align-items: baseline; color: var(--text-2); }
+  .results li :global(svg) { flex-shrink: 0; color: #3ccf7a; transform: translateY(2px); }
+  .results li.bad :global(svg) { color: #ff6b6b; }
+  .results b { color: var(--text); font-weight: 600; }
+  .results em { font-style: normal; color: var(--text-2); }
   .seg { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--bg-2); }
   .seg button { height: 32px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--text-2); font: 600 13px var(--font); cursor: pointer; }
   .seg button.on { background: var(--text); color: var(--bg); }
