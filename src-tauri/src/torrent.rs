@@ -30,7 +30,7 @@ static ACTIVE: Mutex<Vec<String>> = Mutex::const_new(Vec::new());
 
 /// Public trackers added to every torrent, as Stremio does: magnet links from addons often
 /// carry few or none, and these make finding peers much faster.
-const TRACKERS: &[&str] = &[
+pub(crate) const TRACKERS: &[&str] = &[
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.demonii.com:1337/announce",
     "udp://open.stealth.si:80/announce",
@@ -117,7 +117,7 @@ fn is_video(name: &str) -> bool {
 }
 
 /// Picks the file to play: the one the addon named, else the largest video (skipping samples).
-fn choose_file(files: &[(String, u64)], wanted: Option<i64>, hint: Option<&str>) -> Option<usize> {
+pub(crate) fn pick_file(files: &[(String, u64)], wanted: Option<i64>, hint: Option<&str>) -> Option<usize> {
     if let Some(i) = wanted {
         if i >= 0 && (i as usize) < files.len() {
             return Some(i as usize);
@@ -134,7 +134,7 @@ fn choose_file(files: &[(String, u64)], wanted: Option<i64>, hint: Option<&str>)
     best.or_else(|| files.iter().enumerate().max_by_key(|(_, (_, l))| *l).map(|(i, _)| i))
 }
 
-fn magnet(hash: &str, trackers: &[String]) -> String {
+pub(crate) fn magnet_link(hash: &str, trackers: &[String]) -> String {
     let mut m = format!("magnet:?xt=urn:btih:{hash}");
     for t in trackers.iter().take(30) {
         m.push_str("&tr=");
@@ -152,7 +152,7 @@ fn urlencode(s: &str) -> String {
         .collect()
 }
 
-fn valid_hash(h: &str) -> bool {
+pub(crate) fn valid_info_hash(h: &str) -> bool {
     h.len() == 40 && h.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
@@ -165,7 +165,7 @@ pub async fn torrent_stream(
     file_hint: Option<String>,
 ) -> Result<TorrentStream, String> {
     let hash = info_hash.trim().to_ascii_lowercase();
-    if !valid_hash(&hash) {
+    if !valid_info_hash(&hash) {
         return Err("This torrent link is invalid.".into());
     }
     let eng = engine().await?;
@@ -192,7 +192,7 @@ pub async fn torrent_stream(
     }
     let added = tokio::time::timeout(
         Duration::from_secs(60),
-        session.add_torrent(AddTorrent::from_url(magnet(&hash, &trackers)), Some(opts)),
+        session.add_torrent(AddTorrent::from_url(magnet_link(&hash, &trackers)), Some(opts)),
     )
     .await
     .map_err(|_| "Couldn't find anyone sharing this torrent. Try another source.".to_string())?
@@ -214,7 +214,7 @@ pub async fn torrent_stream(
                 .collect()
         })
         .map_err(|e| format!("Couldn't read the torrent's file list: {e:#}"))?;
-    let idx = choose_file(&files, file_idx, file_hint.as_deref()).ok_or("This torrent has no files.")?;
+    let idx = pick_file(&files, file_idx, file_hint.as_deref()).ok_or("This torrent has no files.")?;
     // File selection can only change once the torrent has finished setting up.
     tokio::time::timeout(Duration::from_secs(30), handle.wait_until_initialized())
         .await
@@ -384,7 +384,7 @@ async fn handle_conn(sock: TcpStream, _addr: SocketAddr) -> std::io::Result<()> 
     };
     let Some(eng) = ENGINE.get() else { return respond(&mut wr, "503 Service Unavailable", &[]).await };
     let hash = hash.to_ascii_lowercase();
-    if !valid_hash(&hash) || !ACTIVE.lock().await.contains(&hash) {
+    if !valid_info_hash(&hash) || !ACTIVE.lock().await.contains(&hash) {
         return respond(&mut wr, "404 Not Found", &[]).await;
     }
     let Ok(id) = TorrentIdOrHash::parse(&hash) else { return respond(&mut wr, "404 Not Found", &[]).await };
@@ -446,12 +446,12 @@ mod tests {
     fn picks_the_right_file() {
         let f = |n: &str, l: u64| (n.to_string(), l);
         let files = vec![f("Show/sample.mkv", 900), f("Show/ep.mkv", 500), f("Show/extras.nfo", 5000), f("Show/ep2.mp4", 400)];
-        assert_eq!(choose_file(&files, None, None), Some(1));
-        assert_eq!(choose_file(&files, Some(3), None), Some(3));
-        assert_eq!(choose_file(&files, Some(-1), None), Some(1));
-        assert_eq!(choose_file(&files, Some(99), Some("ep2.mp4")), Some(3));
-        assert_eq!(choose_file(&[f("a.txt", 1), f("b.bin", 9)], None, None), Some(1));
-        assert_eq!(choose_file(&[], None, None), None);
+        assert_eq!(pick_file(&files, None, None), Some(1));
+        assert_eq!(pick_file(&files, Some(3), None), Some(3));
+        assert_eq!(pick_file(&files, Some(-1), None), Some(1));
+        assert_eq!(pick_file(&files, Some(99), Some("ep2.mp4")), Some(3));
+        assert_eq!(pick_file(&[f("a.txt", 1), f("b.bin", 9)], None, None), Some(1));
+        assert_eq!(pick_file(&[], None, None), None);
     }
 
     #[test]
@@ -466,10 +466,10 @@ mod tests {
 
     #[test]
     fn magnet_links() {
-        let m = magnet("abc", &["udp://t.example:80/announce".into()]);
+        let m = magnet_link("abc", &["udp://t.example:80/announce".into()]);
         assert_eq!(m, "magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Ft.example%3A80%2Fannounce");
-        assert!(valid_hash("0123456789abcdef0123456789abcdef01234567"));
-        assert!(!valid_hash("xyz"));
+        assert!(valid_info_hash("0123456789abcdef0123456789abcdef01234567"));
+        assert!(!valid_info_hash("xyz"));
     }
 
     /// Real network test: streams a well-seeded public-domain torrent (Big Buck Bunny).

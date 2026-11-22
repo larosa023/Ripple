@@ -1,6 +1,9 @@
 mod discord;
+mod downloads;
 mod embed;
+mod media;
 mod player;
+mod thumbs;
 mod torrent;
 mod updater;
 
@@ -36,6 +39,10 @@ pub fn run() {
             // during resizes, before the page has painted) WebView2 fills with a solid color,
             // so the desktop never shows through. The page switches this as playback starts
             // and stops, and keeps it in step with the theme.
+            media::init(app.handle());
+            if let Ok(dir) = app.path().app_data_dir() {
+                downloads::init(dir);
+            }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_background_color(Some(tauri::window::Color(11, 13, 18, 255)));
             }
@@ -53,7 +60,17 @@ pub fn run() {
             discord::discord_set,
             torrent::torrent_stream,
             torrent::torrent_status,
-            torrent::torrent_stop_all
+            torrent::torrent_stop_all,
+            thumbs::player_thumb,
+            media::media_info,
+            media::media_state,
+            media::media_clear,
+            downloads::download_add,
+            downloads::download_list,
+            downloads::download_pause,
+            downloads::download_resume,
+            downloads::download_remove,
+            downloads::download_reveal
         ])
         .build(tauri::generate_context!())
         .expect("error while building Ripple")

@@ -17,6 +17,24 @@ export interface PlayInfo {
   meta: MetaDetail;
   videoId: string;
   label: string;
+  /** Start here instead of the saved resume point (switching sources mid-episode). */
+  startAt?: number;
+}
+
+/** Identifies a source regardless of which addon listed it. */
+export const streamKey = (s: SourcedStream) => s.url || `${s.infoHash}:${s.fileIdx ?? ''}`;
+
+// Sources already tried for the episode that's playing, so switching never goes back to a dead one.
+let triedFor = '';
+let tried = new Set<string>();
+let switches = 0;
+function noteStarted(videoId: string, s: SourcedStream) {
+  if (videoId !== triedFor) {
+    triedFor = videoId;
+    tried = new Set();
+    switches = 0;
+  }
+  tried.add(streamKey(s));
 }
 
 export const isEpisodic = (meta: { type: string }) => meta.type !== 'movie';
@@ -44,6 +62,7 @@ export function nextVideo(meta: MetaDetail, videoId: string): Video | null {
 /** Plays a stream in Ripple or the external player. Throws on failure. */
 export async function playStream(s: SourcedStream, info: PlayInfo): Promise<void> {
   const { meta, videoId, label } = info;
+  noteStarted(videoId, s);
   const prepared = await prepare(s, { title: meta.name, type: meta.type, videoId, addons: enabledAddons() });
   if (!prepared) return; // opened in the browser
   if (settings.rememberPerShow && isEpisodic(meta)) {
@@ -51,7 +70,7 @@ export async function playStream(s: SourcedStream, info: PlayInfo): Promise<void
     rememberShow(meta.id, { addonId: s.addonId, bingeGroup: s.behaviorHints?.bingeGroup, quality: quality(s), service: d.service || undefined });
   }
   if (settings.playIn === 'ripple' && isTauri) {
-    await openPlayer(prepared, { title: meta.name, subtitle: label, meta, videoId, stream: s });
+    await openPlayer(prepared, { title: meta.name, subtitle: label, meta, videoId, stream: s, startAt: info.startAt });
   } else {
     await playExternal(prepared, label ? `${meta.name} — ${label}` : meta.name);
     recordPlay(meta, videoId, label, true);
@@ -81,7 +100,12 @@ function score(s: SourcedStream, prev: SourcedStream | null, meta: MetaDetail): 
  * (bingeGroup), addon, quality and debrid service as before. Resolves as soon
  * as an exact bingeGroup match turns up, else when every addon has answered.
  */
-export function pickStream(meta: MetaDetail, videoId: string, prev: SourcedStream | null): Promise<SourcedStream | null> {
+export function pickStream(
+  meta: MetaDetail,
+  videoId: string,
+  prev: SourcedStream | null,
+  skip?: Set<string>,
+): Promise<SourcedStream | null> {
   const order = enabledAddons().map((a) => a.manifest.id);
   const group = prev?.behaviorHints?.bingeGroup ?? shows[meta.id]?.bingeGroup;
   const filters = {
@@ -91,7 +115,7 @@ export function pickStream(meta: MetaDetail, videoId: string, prev: SourcedStrea
     onlyDirect: settings.onlyDirect,
   };
   const playable = (list: SourcedStream[]) =>
-    filterAndSort(list, filters, settings.streamSort, order).filter((s) => s.url || s.infoHash);
+    filterAndSort(list, filters, settings.streamSort, order).filter((s) => (s.url || s.infoHash) && !skip?.has(streamKey(s)));
   const best = (list: SourcedStream[]) => {
     const c = playable(list);
     if (!c.length) return null;
@@ -118,6 +142,46 @@ export function pickStream(meta: MetaDetail, videoId: string, prev: SourcedStrea
       })
       .catch(() => resolve(null));
   });
+}
+
+// ---------- switching sources ----------
+
+const MAX_SWITCHES = 4;
+let switching = false;
+
+/**
+ * The source playing failed or stalled: quietly try the next best one you haven't tried
+ * for this episode (same release group / quality first) and carry on from the same second.
+ * Resolves true if another source was started.
+ */
+export async function switchSource(reason: 'error' | 'stall'): Promise<boolean> {
+  const meta = playback.meta as MetaDetail | null;
+  if (!meta || playback.live || switching || !settings.autoSwitch) return false;
+  if (playback.videoId !== triedFor || switches >= MAX_SWITCHES) return false;
+  switching = true;
+  switches++;
+  const videoId = playback.videoId;
+  const at = playback.time > 5 ? playback.time : undefined;
+  const label = playback.subtitle;
+  toast(
+    `${reason === 'stall' ? 'This source stalled' : "This source isn't working"}. Trying another… (${switches} of ${MAX_SWITCHES})`,
+    'info',
+    5000,
+  );
+  try {
+    const s = await pickStream(meta, videoId, playback.stream, tried);
+    if (!s || playback.videoId !== videoId || !playback.active) {
+      if (!s) toast("Couldn't find another working source. Pick one from the list.", 'error', 7000);
+      return false;
+    }
+    await playStream(s, { meta, videoId, label, startAt: at });
+    return true;
+  } catch (e) {
+    toast((e as Error)?.message ?? String(e), 'error', 6000);
+    return false;
+  } finally {
+    switching = false;
+  }
 }
 
 // ---------- next episode ----------

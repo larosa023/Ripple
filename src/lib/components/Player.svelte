@@ -2,6 +2,7 @@
   // Controls drawn over mpv's video. The page behind is transparent while
   // playing, so mpv's picture shows through everywhere this overlay is clear.
   import Icon from './Icon.svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import WindowControls from './WindowControls.svelte';
   import { errorText, openExternal, playExternal, torrentStatus, type TorrentStatus } from '../player';
   import { filmUrl } from '../letterboxd';
@@ -9,7 +10,7 @@
   import { backdropOf } from '../stremio/images';
   import { clockTime, settings } from '../stores/settings.svelte';
   import { toast } from '../stores/toast.svelte';
-  import { epCode, prefetchNext, playNext, skipToNext, upNext } from '../watch';
+  import { epCode, prefetchNext, playNext, skipToNext, switchSource, upNext } from '../watch';
   import PlayerEpisodes from './PlayerEpisodes.svelte';
   import type { Video } from '../stremio/types';
   import { goLive, neighbour, playChannel, zap, zapChannels } from '../iptv/play.svelte';
@@ -107,6 +108,117 @@
   const nextVid = $derived(episodic && !playback.live ? upNext() : null);
   const hasEpisodes = $derived(episodic && !playback.live && (playback.meta?.videos?.length ?? 0) > 1);
   const epNum = (v: Video) => v.episode ?? v.number;
+
+  // ---------- seek-bar previews ----------
+  // A hidden helper mpv grabs the frame you hover over; frames are kept per stream so
+  // moving back over the bar is instant, and the nearest one fills in while a new one loads.
+  const frames = new Map<number, string>();
+  let framesFor = '';
+  let thumb = $state('');
+  let thumbLoading = $state(false);
+  const canPreview = $derived(
+    settings.seekPreviews && isTauri && !playback.live && !!playback.source && /^(https?|file):/i.test(playback.source.url) && playback.duration > 0,
+  );
+  const step = $derived(Math.max(2, playback.duration / 400));
+  $effect(() => {
+    if (hoverX === null || !canPreview || !playback.source) {
+      thumbLoading = false;
+      return;
+    }
+    const src = playback.source;
+    if (framesFor !== src.url) {
+      frames.clear();
+      framesFor = src.url;
+      thumb = '';
+    }
+    const b = Math.round((hoverX * playback.duration) / step);
+    const hit = frames.get(b);
+    if (hit) {
+      thumb = hit;
+      thumbLoading = false;
+      return;
+    }
+    // Nearest frame we already have, so the box never sits empty.
+    let best = -1;
+    for (const k of frames.keys()) if (best < 0 || Math.abs(k - b) < Math.abs(best - b)) best = k;
+    if (best >= 0 && Math.abs(best - b) * step < playback.duration / 12) thumb = frames.get(best)!;
+    thumbLoading = true;
+    const timer = setTimeout(async () => {
+      try {
+        const url = await invoke<string>('player_thumb', {
+          req: {
+            url: src.url,
+            seconds: b * step,
+            headers: src.headers,
+            path: settings.player === 'mpv' && settings.playerPath ? settings.playerPath : null,
+            width: 320,
+          },
+        });
+        frames.set(b, url);
+        if (framesFor === src.url && hoverX !== null && Math.round((hoverX * playback.duration) / step) === b) {
+          thumb = url;
+          thumbLoading = false;
+        }
+      } catch {
+        /* cancelled by a newer hover, or this stream can't seek: keep what we have */
+      }
+    }, 110);
+    return () => clearTimeout(timer);
+  });
+  /** Keeps the preview box inside the bar at the far left and right. */
+  const tipLeft = $derived.by(() => {
+    if (hoverX === null || !bar) return '0px';
+    const w = bar.clientWidth;
+    const half = canPreview ? 96 : 0;
+    return `${Math.min(w - half, Math.max(half, hoverX * w))}px`;
+  });
+
+  // ---------- switching sources ----------
+  // A source that errors, or sits loading/buffering far too long, is swapped for the next best one.
+  let switchingSrc = $state(false);
+  async function trySwitch(reason: 'error' | 'stall') {
+    if (switchingSrc) return;
+    switchingSrc = true;
+    try {
+      await switchSource(reason);
+    } finally {
+      switchingSrc = false;
+    }
+  }
+  $effect(() => {
+    if (playback.error && !playback.live && playback.meta && settings.autoSwitch) void trySwitch('error');
+  });
+  let lastMove = 0;
+  let lastT = -1;
+  $effect(() => {
+    void playback.source;
+    lastMove = Date.now();
+    lastT = -1;
+  });
+  $effect(() => {
+    const t = playback.time;
+    if (Math.abs(t - lastT) > 0.3) {
+      lastT = t;
+      lastMove = Date.now();
+    }
+  });
+  $effect(() => {
+    const id = setInterval(() => {
+      if (!playback.active || playback.live || !settings.autoSwitch || !playback.meta || playback.ended || playback.error || switchingSrc) return;
+      if (playback.paused && playback.ready) {
+        lastMove = Date.now(); // paused isn't stalled
+        return;
+      }
+      if (playback.ready && !playback.buffering) return;
+      // Torrents can take a while to find peers; direct links shouldn't.
+      const limit = (playback.source?.torrent ? 45 : 25) * 1000;
+      if (Date.now() - lastMove > limit) {
+        lastMove = Date.now();
+        void trySwitch('stall');
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  });
 
   // ---------- pause screen ----------
   // A beat after pausing, the picture dims and a panel says what this is: no flicker on a quick pause.
@@ -625,12 +737,12 @@
         <dl>
           {#each live ? [
             ['Space / K', 'Play / pause'], ['Page Up / Down', 'Previous / next channel'], ['G', 'Channel list'], ['↑ / ↓ or scroll', 'Volume'],
-            ['M', 'Mute'], ['F or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
+            ['M', 'Mute'], ['F / F11 or double-click', 'Fullscreen'], ['C', 'Next subtitle track'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
           ] : [
             ['Space / K', 'Play / pause'], ['← / →', `Back / forward ${settings.arrowStep}s (Shift: ${settings.arrowStep * 3}s)`], ['J / L', `Back / forward ${settings.seekStep}s`],
             ['↑ / ↓' + (settings.wheelAction === 'volume' ? ' or scroll' : ''), 'Volume'], ...(settings.wheelAction === 'seek' ? [['Scroll', `Back / forward ${settings.arrowStep}s`]] : []),
-            ['M', 'Mute'], ['F' + (settings.dblClick === 'fullscreen' ? ' or double-click' : ''), 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
+            ['M', 'Mute'], ['F / F11' + (settings.dblClick === 'fullscreen' ? ' or double-click' : ''), 'Fullscreen'], ['C', 'Next subtitle track'], ['Z / X', 'Subtitles earlier / later'],
             ['Shift + Z / X', 'Audio earlier / later'], ['[ / ]', 'Slower / faster'], ['0–9', 'Jump to 0–90%'], ['S', 'Skip intro / recap'],
             ['Shift + N', 'Next episode'], ['E', 'Episodes'], ['A', 'Fit / fill / stretch'], ['P', 'Screenshot'], ['I', 'Stats for nerds'],
             ['Esc or mouse Back', 'Close player'], ['?', 'This list'],
@@ -680,6 +792,8 @@
           <button class="btn" onclick={() => closePlayer()}>Back to channels</button>
         </div>
       </div>
+    {:else if playback.error && switchingSrc}
+      <div class="center"><div class="ring"></div><span>Trying another source…</span></div>
     {:else if playback.error}
       <div class="center msg">
         <p>{playback.error}</p>
@@ -832,7 +946,12 @@
         <div class="knob" style:left="{progress}%"></div>
         {#if hoverX !== null && playback.duration}
           {@const chap = chapterMarks.length ? chapterAt(hoverX * playback.duration) : ''}
-          <div class="tip" style:left="{hoverX * 100}%">{#if chap}<span class="tchap">{chap}</span>{/if}{fmtTime(hoverX * playback.duration)}</div>
+          <div class="tip" class:withthumb={canPreview} style:left={tipLeft}>
+            {#if canPreview}
+              <span class="tthumb" class:loading={thumbLoading}>{#if thumb}<img src={thumb} alt="" />{/if}<i></i></span>
+            {/if}
+            {#if chap}<span class="tchap">{chap}</span>{/if}<span class="ttime">{fmtTime(hoverX * playback.duration)}</span>
+          </div>
         {/if}
       </div>
       {/if}
@@ -1168,6 +1287,15 @@
     display: flex; flex-direction: column; align-items: center; white-space: nowrap;
   }
   .tchap { font-weight: 700; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .tip.withthumb { padding: 4px 4px 6px; border-radius: 12px; gap: 4px; background: rgb(10 11 15 / 0.92); box-shadow: 0 12px 34px rgb(0 0 0 / 0.5); border: 1px solid rgb(255 255 255 / 0.1); }
+  .tip.withthumb .tchap { max-width: 180px; padding: 0 4px; }
+  .tthumb { position: relative; display: block; width: 184px; aspect-ratio: 16 / 9; border-radius: 9px; overflow: hidden; background: rgb(255 255 255 / 0.06); }
+  .tthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* A thin shimmer while the exact frame loads. */
+  .tthumb i { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, var(--player-accent), transparent); background-size: 50% 100%; background-repeat: no-repeat; }
+  .tthumb.loading i { opacity: 1; animation: tshimmer 0.9s linear infinite; }
+  @keyframes tshimmer { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+  .ttime { font-weight: 600; }
   .chap { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgb(0 0 0 / 0.55); }
   .stats {
     position: absolute; left: 16px; top: 76px; z-index: 3; width: min(420px, calc(100% - 32px)); padding: 10px 14px 12px;

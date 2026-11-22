@@ -225,7 +225,16 @@ function persistProgress() {
 /** Starts a stream inside Ripple. Throws NEED_MPV:... if mpv isn't installed. */
 export async function openPlayer(
   p: Prepared,
-  info: { title: string; subtitle: string; meta: MetaDetail | null; videoId: string; stream?: SourcedStream | null; live?: LiveInfo },
+  info: {
+    title: string;
+    subtitle: string;
+    meta: MetaDetail | null;
+    videoId: string;
+    stream?: SourcedStream | null;
+    live?: LiveInfo;
+    /** Start here instead of the saved resume point. */
+    startAt?: number;
+  },
 ) {
   // Switching videos (next episode): keep the player window, fullscreen and mini mode as they are.
   const keep = playback.active ? { fullscreen: playback.fullscreen, mini: playback.mini } : null;
@@ -253,7 +262,7 @@ export async function openPlayer(
   try {
     await subscribe(token);
     if (token !== startToken) return;
-    const start = settings.resume && !info.live ? resumePoint(info.videoId) : 0;
+    const start = info.live ? 0 : (info.startAt ?? (settings.resume ? resumePoint(info.videoId) : 0));
     await invoke('player_start', {
       req: {
         url: p.url,
