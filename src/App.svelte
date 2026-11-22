@@ -19,6 +19,7 @@
   import { startDiscordSync } from './lib/discord.svelte';
   import { startEpisodeChecks } from './lib/episodes.svelte';
   import { startMediaKeys } from './lib/mediakeys.svelte';
+  import { startDownloads } from './lib/downloads.svelte';
   import type { Component } from 'svelte';
   import Detail from './routes/Detail.svelte';
   import Discover from './routes/Discover.svelte';
@@ -32,6 +33,7 @@
   const later: Record<string, () => Promise<{ default: Component }>> = {
     live: () => import('./routes/Live.svelte'),
     calendar: () => import('./routes/Calendar.svelte'),
+    downloads: () => import('./routes/Downloads.svelte'),
     addons: () => import('./routes/Addons.svelte'),
     settings: () => import('./routes/Settings.svelte'),
     person: () => import('./routes/Person.svelte'),
@@ -72,6 +74,7 @@
   startDiscordSync();
   onMount(startEpisodeChecks);
   onMount(startMediaKeys);
+  onMount(startDownloads);
 
   onMount(() => {
     if (!location.hash && settings.startPage !== 'home') go(settings.startPage);

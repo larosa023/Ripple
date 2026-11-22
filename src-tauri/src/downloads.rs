@@ -345,7 +345,7 @@ async fn torrent_session(root: &Path) -> Result<Arc<Session>, String> {
 }
 
 async fn run_torrent(item: &Item, hash: &str, file_idx: Option<i64>, trackers: &[String], hint: Option<&str>) -> Result<(), String> {
-    let final_path = PathBuf::from(&item.path);
+    let mut final_path = PathBuf::from(&item.path);
     let folder = final_path.parent().ok_or("Bad download folder")?.to_path_buf();
     // Torrent data goes in a hidden working folder next to the final file, then moves into place.
     let work = folder.join(format!(".ripple-{}", &item.id));
@@ -374,7 +374,25 @@ async fn run_torrent(item: &Item, hash: &str, file_idx: Option<i64>, trackers: &
     session.update_only_files(&handle, &[idx].into_iter().collect()).await.map_err(|e| format!("{e:#}"))?;
     session.unpause(&handle).await.ok();
     let size = files[idx].1;
-    update(&item.id, |it| it.size = size);
+    // The name was chosen before the torrent's file list was known: use the video's real extension.
+    let real_ext = files[idx].0.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).filter(|e| e.len() <= 5 && e.chars().all(|c| c.is_ascii_alphanumeric()));
+    if let Some(ext) = real_ext {
+        if final_path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) != Some(ext.clone()) {
+            let mut candidate = final_path.with_extension(&ext);
+            let stem = final_path.file_stem().and_then(|s| s.to_str()).unwrap_or("Download").to_string();
+            let mut n = 2;
+            while candidate.exists() {
+                candidate = final_path.with_file_name(format!("{stem} ({n}).{ext}"));
+                n += 1;
+            }
+            final_path = candidate;
+        }
+    }
+    let shown = final_path.to_string_lossy().to_string();
+    update(&item.id, |it| {
+        it.size = size;
+        it.path = shown;
+    });
 
     let id = TorrentIdOrHash::Id(handle.id());
     let result = loop {

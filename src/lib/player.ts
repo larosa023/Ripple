@@ -158,13 +158,23 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
     }
   }
 
+  const subInfo = await findSubtitles(stream, ctx);
+  const subtitles = subInfo.map((s) => s.url);
+  return { url, subtitles, subInfo, headers, torrent };
+}
+
+/** The stream's own subtitles plus a few per preferred language from your subtitle addons. */
+export async function findSubtitles(
+  stream: Pick<SourcedStream, 'subtitles' | 'addonName'> | null,
+  ctx: { type: string; videoId: string; addons: InstalledAddon[] },
+): Promise<SubInfo[]> {
   const langs = settings.subtitleLangs
     .split(',')
     .map((l) => l.trim())
     .filter(Boolean);
-  const subInfo: SubInfo[] = (stream.subtitles ?? [])
+  const subInfo: SubInfo[] = (stream?.subtitles ?? [])
     .filter((s) => s?.url)
-    .map((s) => ({ url: s.url, lang: s.lang ?? '', source: stream.addonName }));
+    .map((s) => ({ url: s.url, lang: s.lang ?? '', source: stream?.addonName ?? '' }));
   if (langs.length) {
     try {
       const extra = await getSubtitles(ctx.addons, ctx.type, ctx.videoId);
@@ -179,8 +189,7 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
       /* subtitles are best-effort */
     }
   }
-  const subtitles = subInfo.map((s) => s.url);
-  return { url, subtitles, subInfo, headers, torrent };
+  return subInfo;
 }
 
 /** Plays a prepared stream in the configured external player. */

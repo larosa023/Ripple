@@ -12,6 +12,7 @@
   import { toast } from '../stores/toast.svelte';
   import { epCode, prefetchNext, playNext, skipToNext, switchSource, upNext } from '../watch';
   import PlayerEpisodes from './PlayerEpisodes.svelte';
+  import { canDownload, downloadOf, startDownload } from '../downloads.svelte';
   import type { Video } from '../stremio/types';
   import { goLive, neighbour, playChannel, zap, zapChannels } from '../iptv/play.svelte';
   import { nowNext, tv } from '../iptv/live.svelte';
@@ -109,6 +110,11 @@
   const hasEpisodes = $derived(episodic && !playback.live && (playback.meta?.videos?.length ?? 0) > 1);
   const epNum = (v: Video) => v.episode ?? v.number;
 
+  // ---------- downloads ----------
+  const canSave = $derived(
+    isTauri && !playback.live && !!playback.meta && !!playback.stream && canDownload(playback.stream) && !playback.source?.url.startsWith('file://'),
+  );
+
   // ---------- seek-bar previews ----------
   // A hidden helper mpv grabs the frame you hover over; frames are kept per stream so
   // moving back over the bar is instant, and the nearest one fills in while a new one loads.
@@ -154,6 +160,7 @@
             width: 320,
           },
         });
+        if (typeof url !== 'string' || !url.startsWith('data:image/')) return;
         frames.set(b, url);
         if (framesFor === src.url && hoverX !== null && Math.round((hoverX * playback.duration) / step) === b) {
           thumb = url;
@@ -1130,6 +1137,12 @@
               </div>
               <div class="sep"></div>
               <button class="row" onclick={() => { menu = ''; void snap(); }}><Icon name="camera" size={17} /><span>Take screenshot</span><span class="key">P</span></button>
+              {#if canSave}
+                {@const have = downloadOf(playback.videoId)}
+                <button class="row" disabled={!!have} onclick={() => { menu = ''; void startDownload(playback.stream!, playback.meta!, playback.videoId, playback.subtitle); }}>
+                  <Icon name="download" size={17} /><span>{have ? (have.status === 'done' ? 'Downloaded' : 'Downloading…') : episodic ? 'Download this episode' : 'Download'}</span>
+                </button>
+              {/if}
               <button class="row" class:sel={stats} onclick={() => { stats = !stats; menu = ''; }}><Icon name="info" size={17} /><span>Stats for nerds</span><span class="key">I</span></button>
               <button class="row" onclick={() => { help = true; menu = ''; }}><Icon name="keyboard" size={17} /><span>Keyboard shortcuts</span><span class="key">?</span></button>
               <button class="row" onclick={() => { menu = ''; openStudio('player'); }}><Icon name="sliders" size={17} /><span>Player settings…</span></button>
@@ -1460,6 +1473,7 @@
   .row :global(svg) { opacity: 0.8; flex-shrink: 0; }
   .row span:not(.key) { flex: 1; }
   .row.sel { color: var(--player-accent); }
+  .row:disabled { opacity: 0.5; cursor: default; }
 
   .skipn { position: relative; }
   .skipn span { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 1px; font: 800 8.5px var(--font); pointer-events: none; }

@@ -11,8 +11,13 @@
   import { dismiss, toast } from '../stores/toast.svelte';
   import Icon from './Icon.svelte';
   import { untrack } from 'svelte';
+  import { isTauri } from '../stremio/http';
+  import { canDownload, downloadedCopy, downloadOf, playDownload, startDownload } from '../downloads.svelte';
 
   let { meta, videoId, label }: { meta: MetaDetail; videoId: string; label: string } = $props();
+  const local = $derived(downloadedCopy(videoId));
+  const saving = $derived(downloadOf(videoId));
+  const gb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
 
   let streams: SourcedStream[] = $state([]);
   let pending = $state(0);
@@ -146,6 +151,27 @@
   </div>
 
   <div class="list">
+    {#if local}
+      <div
+        class="stream localcopy"
+        role="button"
+        tabindex="0"
+        title={local.path}
+        onclick={() => playDownload(local, meta)}
+        onkeydown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          playDownload(local, meta);
+        }}
+      >
+        <div class="q pc"><Icon name="download" size={17} /></div>
+        <div class="body">
+          <div class="line1"><span class="src">On this PC</span><span class="last">Downloaded</span></div>
+          <div class="meta"><span>{gb(local.size)}</span><span>Plays instantly, even offline</span></div>
+        </div>
+        <div class="actions"><span class="play"><Icon name="play" size={14} fill /></span></div>
+      </div>
+    {/if}
     {#each groups as g (g.name)}
       <h3 class="group">{g.name} <span>{g.items.length}</span></h3>
       {#each g.items as s, i (i + (s.url ?? s.infoHash ?? s.externalUrl ?? '') + s.addonId)}
@@ -182,6 +208,14 @@
             </div>
           </div>
           <div class="actions">
+            {#if isTauri && canDownload(s)}
+              <button
+                class="icon-btn"
+                title={saving ? (saving.status === 'done' ? 'Already downloaded' : 'Already downloading') : 'Download to watch offline'}
+                disabled={!!saving}
+                onclick={(e) => { e.stopPropagation(); void startDownload(s, meta, videoId, label); }}
+              ><Icon name="download" size={15} /></button>
+            {/if}
             <button class="icon-btn" title="Copy link" onclick={(e) => { e.stopPropagation(); copy(s); }}><Icon name="copy" size={15} /></button>
             <span class="play"><Icon name="play" size={14} fill /></span>
           </div>
@@ -246,6 +280,8 @@
     background: color-mix(in srgb, var(--bg-2) 82%, transparent); border: 1px solid transparent;
     transition: background var(--dur), border-color var(--dur);
   }
+  .localcopy { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-2)); margin-bottom: 10px; }
+  .q.pc { color: var(--accent); }
   .stream:hover, .stream:focus-visible { background: color-mix(in srgb, var(--bg-3) 92%, transparent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); outline: none; }
   .stream.ghost { height: 74px; cursor: default; border: 0; }
 
