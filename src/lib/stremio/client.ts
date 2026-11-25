@@ -255,6 +255,35 @@ export function getStreams(
   ).then(() => undefined);
 }
 
+/** Details of the file being played, which subtitle addons use to rank their matches. */
+export interface SubtitleHints {
+  filename?: string;
+  videoSize?: number;
+  videoHash?: string;
+}
+
+/**
+ * One request per subtitle addon, so a slow addon (some check a dozen sources) never holds up
+ * the fast ones. Subtitle addons get longer than the usual timeout.
+ */
+export function subtitleRequests(
+  addons: InstalledAddon[],
+  type: string,
+  id: string,
+  hints?: SubtitleHints,
+): { addon: string; list: Promise<(Subtitle & { addon: string })[]> }[] {
+  const extra = hints ? { videoHash: hints.videoHash, videoSize: hints.videoSize, filename: hints.filename } : undefined;
+  return addons
+    .filter((a) => a.enabled && supports(a, 'subtitles', type, id))
+    .map((a) => {
+      const url = resourceUrl(a, 'subtitles', type, id, extra);
+      const list = cached(url, 30 * 60_000, () =>
+        getJson<{ subtitles?: Subtitle[] }>(url, Math.max(requestTimeout, 30_000)).then((r) => r.subtitles ?? []),
+      ).then((l) => (Array.isArray(l) ? l : []).filter((s) => s?.url).map((s) => ({ ...s, addon: a.manifest.name })));
+      return { addon: a.manifest.name, list };
+    });
+}
+
 /** Subtitles from every subtitle addon, each tagged with the addon it came from. */
 export async function getSubtitles(addons: InstalledAddon[], type: string, id: string): Promise<(Subtitle & { addon: string })[]> {
   const sources = addons.filter((a) => a.enabled && supports(a, 'subtitles', type, id));

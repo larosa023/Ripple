@@ -1,5 +1,5 @@
 // State and controls for the built-in player (mpv embedded in Ripple's window).
-import { invoke, stopTorrents, type Prepared } from '../player';
+import { invoke, stopTorrents, type Prepared, type SubInfo } from '../player';
 import { isTauri } from '../stremio/http';
 import { setBackdropClear } from '../backdrop';
 import { baseLang, langName, sameLang } from '../lang';
@@ -278,6 +278,7 @@ export async function openPlayer(
         screenshotDir: await picturesFolder(),
       },
     });
+    if (p.lateSubs) void addLateSubtitles(p.lateSubs, token);
     if (token !== startToken || !playback.active) {
       // Closed (Back/Esc) or replaced while mpv was starting: make sure nothing keeps playing.
       if (!playback.active) await invoke('player_stop').catch(() => {});
@@ -509,6 +510,27 @@ export async function setMini(on: boolean) {
   playback.mini = on;
   document.documentElement.classList.toggle('mini', on);
   layoutMini();
+}
+
+/**
+ * Subtitles from addons that answered after playback started: added to the running player
+ * (unselected) so they show up in the subtitle menu, named like the others.
+ */
+async function addLateSubtitles(late: Promise<SubInfo[]>, token: number) {
+  let list: SubInfo[] = [];
+  try {
+    list = await late;
+  } catch {
+    return;
+  }
+  for (const s of list) {
+    if (token !== startToken || !playback.active || !playback.source) return;
+    const info = (playback.source.subInfo ??= []);
+    if (info.some((x) => x.url === s.url)) continue;
+    info.push(s);
+    const title = [s.source, langName(s.lang)].filter(Boolean).join(' · ');
+    await mpv('sub-add', s.url, 'auto', title, s.lang || '');
+  }
 }
 
 // ---------- controls ----------

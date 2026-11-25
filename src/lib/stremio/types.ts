@@ -132,6 +132,7 @@ export interface Stream {
     bingeGroup?: string;
     filename?: string;
     videoSize?: number;
+    videoHash?: string;
     proxyHeaders?: { request?: Record<string, string>; response?: Record<string, string> };
   };
 }

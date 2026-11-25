@@ -152,11 +152,19 @@ export async function playDownload(d: Download, meta?: MetaDetail | null) {
       m = null; // offline: still plays, just without artwork and episode details
     }
   }
-  const subInfo = await Promise.race([
-    findSubtitles(null, { type: d.metaType, videoId: d.videoId, addons: enabledAddons() }).catch(() => []),
-    new Promise<[]>((r) => setTimeout(() => r([]), 4000)),
-  ]);
-  const prepared: Prepared = { url: fileUrl(d.path), subtitles: subInfo.map((x) => x.url), subInfo, headers: [] };
+  // Offline is fine: findSubtitles waits a few seconds at most, and failures just mean no addon subtitles.
+  const found = await findSubtitles({ subtitles: [], addonName: '', behaviorHints: { filename: d.path.split(/[\\/]/).pop(), videoSize: d.size || undefined } }, {
+    type: d.metaType,
+    videoId: d.videoId,
+    addons: enabledAddons(),
+  }).catch(() => ({ now: [], later: Promise.resolve([]) }));
+  const prepared: Prepared = {
+    url: fileUrl(d.path),
+    subtitles: found.now.map((x) => x.url),
+    subInfo: found.now,
+    lateSubs: found.later,
+    headers: [],
+  };
   try {
     await openPlayer(prepared, { title: d.title, subtitle: d.subtitle, meta: m, videoId: d.videoId });
   } catch (e) {

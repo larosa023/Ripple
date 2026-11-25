@@ -1,10 +1,10 @@
 import { isTauri } from './stremio/http';
-import { getSubtitles } from './stremio/client';
+import { subtitleRequests } from './stremio/client';
 import { sameLang } from './lang';
 import { describe, playableUrl } from './stremio/streams';
 import { resolveDebrid } from './resolve';
 import { dismiss, toast } from './stores/toast.svelte';
-import type { InstalledAddon, SourcedStream } from './stremio/types';
+import type { InstalledAddon, SourcedStream, Subtitle } from './stremio/types';
 import { parseArgs, settings } from './stores/settings.svelte';
 
 export interface DetectedPlayer {
@@ -71,6 +71,8 @@ export interface Prepared {
   subtitles: string[];
   /** Details for each entry in `subtitles`. */
   subInfo?: SubInfo[];
+  /** Subtitles from slow addons, added to the player once they arrive. */
+  lateSubs?: Promise<SubInfo[]>;
   headers: [string, string][];
   /** Info hash when the built-in torrent engine is streaming this. */
   torrent?: string;
@@ -158,38 +160,78 @@ export async function prepare(stream: SourcedStream, ctx: PlayContext): Promise<
     }
   }
 
-  const subInfo = await findSubtitles(stream, ctx);
+  const found = await findSubtitles(stream, ctx);
+  const subInfo = found.now;
   const subtitles = subInfo.map((s) => s.url);
-  return { url, subtitles, subInfo, headers, torrent };
+  return { url, subtitles, subInfo, headers, torrent, lateSubs: found.later };
 }
 
-/** The stream's own subtitles plus a few per preferred language from your subtitle addons. */
+/** Up to this many per language from each subtitle addon (in the addon's own ranking). */
+const PER_ADDON = 3;
+/** How long playback waits for subtitle addons; slower ones are added once they answer. */
+const WAIT_MS = 3500;
+
+export interface FoundSubtitles {
+  /** Ready before playback starts. */
+  now: SubInfo[];
+  /** From addons that answered too slowly; added to the player as they arrive. */
+  later: Promise<SubInfo[]>;
+}
+
+/**
+ * The stream's own subtitles plus, from each subtitle addon, a few per language you listed in
+ * Settings. Every addon gets its own share, so one addon can't crowd out another.
+ */
 export async function findSubtitles(
-  stream: Pick<SourcedStream, 'subtitles' | 'addonName'> | null,
+  stream: Pick<SourcedStream, 'subtitles' | 'addonName' | 'behaviorHints'> | null,
   ctx: { type: string; videoId: string; addons: InstalledAddon[] },
-): Promise<SubInfo[]> {
+): Promise<FoundSubtitles> {
   const langs = settings.subtitleLangs
     .split(',')
     .map((l) => l.trim())
     .filter(Boolean);
-  const subInfo: SubInfo[] = (stream?.subtitles ?? [])
+  const own: SubInfo[] = (stream?.subtitles ?? [])
     .filter((s) => s?.url)
     .map((s) => ({ url: s.url, lang: s.lang ?? '', source: stream?.addonName ?? '' }));
-  if (langs.length) {
-    try {
-      const extra = await getSubtitles(ctx.addons, ctx.type, ctx.videoId);
-      // A few per language (best first, as the addon ranked them), in the order you listed them.
-      for (const l of langs) {
-        extra
-          .filter((s) => s?.url && sameLang(s.lang, l) && !subInfo.some((x) => x.url === s.url))
-          .slice(0, 4)
-          .forEach((s) => subInfo.push({ url: s.url, lang: s.lang, source: s.addon }));
+  if (!langs.length) return { now: own, later: Promise.resolve([]) };
+
+  const hints = stream?.behaviorHints;
+  const requests = subtitleRequests(ctx.addons, ctx.type, ctx.videoId, {
+    filename: hints?.filename,
+    videoSize: hints?.videoSize,
+    videoHash: hints?.videoHash,
+  });
+  const answers = new Map<number, (Subtitle & { addon: string })[]>();
+  const settled = requests.map((r, i) =>
+    r.list.then(
+      (list) => void answers.set(i, list),
+      () => void answers.set(i, []),
+    ),
+  );
+  const taken = new Set(own.map((s) => s.url));
+  /** Your languages in order; within each, every answered addon's best few. */
+  const pick = (idx: number[]): SubInfo[] => {
+    const out: SubInfo[] = [];
+    for (const l of langs) {
+      for (const i of idx) {
+        (answers.get(i) ?? [])
+          .filter((s) => sameLang(s.lang, l) && !taken.has(s.url))
+          .slice(0, PER_ADDON)
+          .forEach((s) => {
+            taken.add(s.url);
+            out.push({ url: s.url, lang: s.lang, source: s.addon });
+          });
       }
-    } catch {
-      /* subtitles are best-effort */
     }
-  }
-  return subInfo;
+    return out;
+  };
+
+  await Promise.race([Promise.all(settled), new Promise((r) => setTimeout(r, WAIT_MS))]);
+  const ready = requests.map((_, i) => i).filter((i) => answers.has(i));
+  const now = [...own, ...pick(ready)];
+  const pending = requests.map((_, i) => i).filter((i) => !answers.has(i));
+  const later = pending.length ? Promise.all(pending.map((i) => settled[i])).then(() => pick(pending)) : Promise.resolve([]);
+  return { now, later };
 }
 
 /** Plays a prepared stream in the configured external player. */
